@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#16292B" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+    <script>
+      const choice = localStorage.getItem('feliam-theme') || 'system';
+      const dark =
+        choice === 'dark' ||
+        (choice === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.classList.toggle('dark', dark);
+    </script>
+    <title>Feliam</title>
+    <script type="module" crossorigin src="/assets/index-DB-X9tGO.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DDvmOIzp.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

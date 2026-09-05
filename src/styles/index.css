@@ -1,0 +1,134 @@
+@import '@fontsource/space-grotesk/300.css';
+@import '@fontsource/space-grotesk/400.css';
+@import '@fontsource/space-grotesk/500.css';
+@import '@fontsource/space-grotesk/600.css';
+@import '@fontsource/space-grotesk/700.css';
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #f5f2ec;
+  --foreground: #16292b;
+  --surface: #f5f2ec;
+  --surface-raised: #f5f2ec;
+  --surface-sunken: rgb(138 149 152 / 0.14);
+  --muted: rgb(138 149 152 / 0.16);
+  --muted-foreground: #8a9598;
+  --border: rgb(22 41 43 / 0.24);
+  --input: #8a9598;
+  --primary: #16292b;
+  --primary-foreground: #f5f2ec;
+  --secondary: #000000;
+  --secondary-foreground: #f5f2ec;
+  --accent: #8a9598;
+  --accent-foreground: #000000;
+  --success: #16292b;
+  --warning: #000000;
+  --danger: #000000;
+  --focus: #16292b;
+  --sidebar: #16292b;
+  --sidebar-foreground: #f5f2ec;
+  --action-primary: #f5f2ec;
+  --action-primary-foreground: #000000;
+  --action-secondary: #000000;
+  --action-secondary-foreground: #f5f2ec;
+}
+
+.dark {
+  --background: #16292b;
+  --foreground: #f5f2ec;
+  --surface: #16292b;
+  --surface-raised: #16292b;
+  --surface-sunken: #000000;
+  --muted: rgb(138 149 152 / 0.2);
+  --muted-foreground: #8a9598;
+  --border: #8a9598;
+  --input: #8a9598;
+  --primary: #f5f2ec;
+  --primary-foreground: #000000;
+  --secondary: #000000;
+  --secondary-foreground: #f5f2ec;
+  --accent: #8a9598;
+  --accent-foreground: #000000;
+  --success: #f5f2ec;
+  --warning: #f5f2ec;
+  --danger: #f5f2ec;
+  --focus: #f5f2ec;
+  --sidebar: #000000;
+  --sidebar-foreground: #f5f2ec;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-focus: var(--focus);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --font-sans: 'Space Grotesk', Helvetica, Arial, sans-serif;
+  --font-display: 'Space Grotesk', Helvetica, Arial, sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+html {
+  background: var(--background);
+  color: var(--foreground);
+}
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--focus) 45%, transparent);
+  outline-offset: 2px;
+}
+::selection {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
