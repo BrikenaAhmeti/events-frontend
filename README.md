@@ -39,10 +39,11 @@ Never add database URLs, Supabase secret keys, OpenAI keys, R2 credentials, Rese
 
 ## Vercel deployment
 
-Create a Vercel project with this directory as its root. The checked-in `vercel.json` selects Vite and preserves React Router routes on direct navigation. Add these production variables in the project settings:
+Create a Vercel project with this directory as its root. The checked-in `vercel.json` selects Vite and preserves React Router routes on direct navigation. Copy the values from `.env.production.example`, replace `YOUR-BACKEND` with the deployed backend project domain, and add them under Project Settings → Environment Variables for both Production and Preview:
 
 ```dotenv
 VITE_API_URL=https://YOUR-BACKEND.vercel.app/api/v1
+VITE_WS_URL=https://YOUR-BACKEND.vercel.app
 VITE_ENABLE_SOCKET_PROGRESS=false
 ```
 
