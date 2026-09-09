@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ComponentType } from 'react';
 import { useTranslation } from 'react-i18next';
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { Skeleton } from '../../components/atoms/Skeleton';
 import { ProtectedRoute } from '../../features/auth/ProtectedRoute';
 import { AppLayout } from '../../layouts/AppLayout';
@@ -62,6 +62,7 @@ const suspense = (element: React.ReactNode) => (
 );
 
 export const router = createBrowserRouter([
+  { path: '/', element: <Navigate to="/login" replace /> },
   { path: '/login', element: suspense(<LoginPage />) },
   { path: '/forgot-password', element: suspense(<ForgotPasswordPage />) },
   { path: '/activate', element: suspense(<ActivationPage />) },
@@ -106,5 +107,5 @@ export const router = createBrowserRouter([
       { path: '/guest/events/:eventId', element: suspense(<GuestEventPage />) },
     ],
   },
-  { path: '*', element: suspense(<ErrorPage />) },
+  { path: '*', element: <Navigate to="/login" replace /> },
 ]);
