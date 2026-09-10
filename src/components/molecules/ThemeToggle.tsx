@@ -1,11 +1,10 @@
-import { Laptop, Moon, Sun } from 'lucide-react';
+import { Moon, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useTheme, type ThemeChoice } from '../../app/providers/theme-provider';
 
 const options: Array<{ value: ThemeChoice; icon: typeof Sun }> = [
   { value: 'light', icon: Sun },
   { value: 'dark', icon: Moon },
-  { value: 'system', icon: Laptop },
 ];
 
 export function ThemeToggle() {

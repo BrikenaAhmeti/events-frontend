@@ -23,9 +23,12 @@
   --secondary-foreground: #f5f2ec;
   --accent: #8a9598;
   --accent-foreground: #000000;
-  --success: #16292b;
-  --warning: #000000;
-  --danger: #000000;
+  --success: #18794e;
+  --warning: #935f00;
+  --warning-foreground: #ffffff;
+  --danger: #b42318;
+  --danger-foreground: #ffffff;
+  --info: #245ea8;
   --focus: #16292b;
   --sidebar: #16292b;
   --sidebar-foreground: #f5f2ec;
@@ -51,9 +54,12 @@
   --secondary-foreground: #f5f2ec;
   --accent: #8a9598;
   --accent-foreground: #000000;
-  --success: #f5f2ec;
-  --warning: #f5f2ec;
-  --danger: #f5f2ec;
+  --success: #6ed6a0;
+  --warning: #f6bd60;
+  --warning-foreground: #241600;
+  --danger: #ff8a80;
+  --danger-foreground: #2c0906;
+  --info: #8fbcff;
   --focus: #f5f2ec;
   --sidebar: #000000;
   --sidebar-foreground: #f5f2ec;
@@ -77,7 +83,10 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-info: var(--info);
   --color-focus: var(--focus);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -116,6 +125,12 @@ button:disabled {
 :focus-visible {
   outline: 3px solid color-mix(in srgb, var(--focus) 45%, transparent);
   outline-offset: 2px;
+}
+.filter-control:focus,
+.filter-control:focus-visible {
+  border-color: var(--input);
+  box-shadow: none;
+  outline: none;
 }
 ::selection {
   background: var(--accent);

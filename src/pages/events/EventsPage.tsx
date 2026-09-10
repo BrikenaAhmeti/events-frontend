@@ -1,13 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarDays, ChevronLeft, ChevronRight, Search, Trash2, XCircle } from 'lucide-react';
+import {
+  Building2,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  ListFilter,
+  Search,
+  Trash2,
+  UserRound,
+  XCircle,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useToast } from '../../app/providers/toast-provider';
 import { Button } from '../../components/atoms/Button';
-import { Input, Select } from '../../components/atoms/Input';
+import { Input } from '../../components/atoms/Input';
 import { Skeleton } from '../../components/atoms/Skeleton';
 import { ConfirmDialog } from '../../components/molecules/ConfirmDialog';
+import { CustomSelect } from '../../components/molecules/CustomSelect';
+import { DateFilter } from '../../components/molecules/DateFilter';
 import { EmptyState } from '../../components/molecules/EmptyState';
 import { PageHeader } from '../../components/molecules/PageHeader';
 import { StatusBadge } from '../../components/molecules/StatusBadge';
@@ -122,7 +134,7 @@ export function EventsPage() {
             <span className="sr-only">{t('searchPlaceholder')}</span>
             <Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted-foreground" />
             <Input
-              className="pl-9"
+              className="filter-control pl-9"
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value);
@@ -132,81 +144,67 @@ export function EventsPage() {
             />
           </label>
           {isSuperAdmin && (
-            <Select
-              aria-label={t('clientName')}
+            <CustomSelect
+              label={t('clientName')}
+              icon={Building2}
               value={clientId}
-              onChange={(event) => {
-                setClientId(event.target.value);
+              options={[
+                { value: '', label: t('allClients') },
+                ...(clients.data ?? []).map((client) => ({
+                  value: client.id,
+                  label: client.name,
+                })),
+              ]}
+              onChange={(value) => {
+                setClientId(value);
                 setCreatedByUserId('');
                 resetPage();
               }}
-            >
-              <option value="">{t('allClients')}</option>
-              {clients.data?.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                </option>
-              ))}
-            </Select>
+            />
           )}
-          <Select
-            aria-label={t('lifecycle')}
+          <CustomSelect
+            label={t('lifecycle')}
+            icon={ListFilter}
             value={lifecycle}
-            onChange={(event) => {
-              setLifecycle(event.target.value);
+            options={[
+              { value: '', label: t('allEvents') },
+              ...['UPCOMING', 'ONGOING', 'PAST', 'CANCELLED', 'UNSCHEDULED'].map((status) => ({
+                value: status,
+                label: t(`statuses.${status}`, { ns: 'common' }),
+              })),
+            ]}
+            onChange={(value) => {
+              setLifecycle(value);
               resetPage();
             }}
-          >
-            <option value="">{t('allEvents')}</option>
-            {['UPCOMING', 'ONGOING', 'PAST', 'CANCELLED', 'UNSCHEDULED'].map((status) => (
-              <option key={status} value={status}>
-                {t(`statuses.${status}`, { ns: 'common' })}
-              </option>
-            ))}
-          </Select>
-          <Select
-            aria-label={t('creator')}
+          />
+          <CustomSelect
+            label={t('creator')}
+            icon={UserRound}
             value={createdByUserId}
-            onChange={(event) => {
-              setCreatedByUserId(event.target.value);
-              resetPage();
-            }}
-          >
-            <option value="">{t('allCreators')}</option>
-            {creators.data?.map((creator) => (
-              <option key={creator.id} value={creator.id}>
-                {creator.firstName} {creator.lastName}
-              </option>
-            ))}
-          </Select>
-          <Input
-            aria-label={t('singleDate')}
-            type="date"
-            value={date}
-            onChange={(event) => {
-              setDate(event.target.value);
+            options={[
+              { value: '', label: t('allCreators') },
+              ...(creators.data ?? []).map((creator) => ({
+                value: creator.id,
+                label: `${creator.firstName} ${creator.lastName}`,
+              })),
+            ]}
+            onChange={(value) => {
+              setCreatedByUserId(value);
               resetPage();
             }}
           />
-          <Input
-            aria-label={t('fromDate')}
-            type="date"
-            value={from}
-            onChange={(event) => {
-              setFrom(event.target.value);
+          <DateFilter
+            className="md:col-span-2 xl:col-span-2"
+            value={{ date, from, to }}
+            onChange={(nextValue) => {
+              setDate(nextValue.date);
+              setFrom(nextValue.from);
+              setTo(nextValue.to);
               resetPage();
             }}
           />
-          <Input
-            aria-label={t('toDate')}
-            type="date"
-            value={to}
-            onChange={(event) => {
-              setTo(event.target.value);
-              resetPage();
-            }}
-          />
-          <Button variant="quiet" onClick={clearFilters}>
+          <Button className="filter-control" variant="quiet" onClick={clearFilters}>
             {t('clearFilters')}
           </Button>
         </div>
@@ -270,7 +268,7 @@ export function EventsPage() {
                     {event.capabilities.canCancel && event.status !== 'CANCELLED' && (
                       <Button
                         size="sm"
-                        variant="quiet"
+                        variant="warning"
                         onClick={() => setConfirmation({ event, action: 'cancel' })}
                       >
                         <XCircle className="size-4" />
@@ -280,7 +278,7 @@ export function EventsPage() {
                     {event.capabilities.canDelete && (
                       <Button
                         size="sm"
-                        variant="quiet"
+                        variant="danger"
                         onClick={() => setConfirmation({ event, action: 'delete' })}
                       >
                         <Trash2 className="size-4" />
@@ -341,7 +339,7 @@ export function EventsPage() {
                         {event.capabilities.canCancel && event.status !== 'CANCELLED' && (
                           <Button
                             size="sm"
-                            variant="quiet"
+                            variant="warning"
                             onClick={() => setConfirmation({ event, action: 'cancel' })}
                           >
                             <XCircle className="size-4" />
@@ -351,7 +349,7 @@ export function EventsPage() {
                         {event.capabilities.canDelete && (
                           <Button
                             size="sm"
-                            variant="quiet"
+                            variant="danger"
                             onClick={() => setConfirmation({ event, action: 'delete' })}
                           >
                             <Trash2 className="size-4" />
@@ -406,10 +404,19 @@ export function EventsPage() {
           confirmation?.action === 'delete' ? 'deleteEventDescription' : 'cancelEventDescription',
         )}
         confirmLabel={t(confirmation?.action === 'delete' ? 'deleteEvent' : 'cancelEvent')}
-        tone="danger"
-        onClose={() => setConfirmation(null)}
+        tone={confirmation?.action === 'delete' ? 'danger' : 'warning'}
+        loading={action.isPending}
+        onClose={() => {
+          if (!action.isPending) setConfirmation(null);
+        }}
         onConfirm={() => confirmation && action.mutate(confirmation)}
-      />
+      >
+        {confirmation && (
+          <p className="mt-4 rounded-lg bg-surface-sunken px-3 py-2 text-sm font-semibold">
+            {t('selectedEvent', { name: confirmation.event.name })}
+          </p>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }

@@ -8,6 +8,7 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   tone = 'primary',
+  loading = false,
   onConfirm,
   onClose,
   children,
@@ -16,7 +17,8 @@ export function ConfirmDialog({
   title: string;
   description: string;
   confirmLabel: string;
-  tone?: 'primary' | 'danger';
+  tone?: 'primary' | 'warning' | 'danger';
+  loading?: boolean;
   onConfirm: () => void;
   onClose: () => void;
   children?: ReactNode;
@@ -30,8 +32,13 @@ export function ConfirmDialog({
   return (
     <dialog
       ref={ref}
-      onCancel={onClose}
-      onClose={onClose}
+      onCancel={(event) => {
+        if (loading) event.preventDefault();
+        else onClose();
+      }}
+      onClose={() => {
+        if (!loading) onClose();
+      }}
       className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-border bg-surface-raised p-0 text-foreground backdrop:bg-black/40"
     >
       <div className="p-6">
@@ -40,10 +47,10 @@ export function ConfirmDialog({
         {children}
       </div>
       <div className="flex justify-end gap-3 border-t border-border p-4">
-        <Button variant="quiet" onClick={onClose}>
+        <Button variant="quiet" disabled={loading} onClick={onClose}>
           {t('cancel')}
         </Button>
-        <Button variant={tone} onClick={onConfirm}>
+        <Button variant={tone} loading={loading} onClick={onConfirm}>
           {confirmLabel}
         </Button>
       </div>

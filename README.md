@@ -108,7 +108,7 @@ The supplied Feliam identity is centralized in `src/app/config/brand.ts`, with b
 
 All colors live as semantic CSS variables in `src/styles/index.css`, including background, surfaces, text, borders, primary, accent, success, warning, danger, focus and sidebar. Components use semantic Tailwind utilities rather than raw colors.
 
-Light, dark and system themes are supported. Preference is persisted independently of authentication and system changes are observed. A small inline bootstrap prevents a major initial theme flash.
+Light and dark themes are supported. Preference is persisted independently of authentication, and a small inline bootstrap prevents a major initial theme flash.
 
 ## Responsive and accessible behavior
 

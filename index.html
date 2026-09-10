@@ -7,10 +7,8 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <script>
-      const choice = localStorage.getItem('feliam-theme') || 'system';
-      const dark =
-        choice === 'dark' ||
-        (choice === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+      const choice = localStorage.getItem('feliam-theme');
+      const dark = choice === 'dark';
       document.documentElement.classList.toggle('dark', dark);
     </script>
     <title>Feliam</title>

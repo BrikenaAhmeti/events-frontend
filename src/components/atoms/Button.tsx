@@ -3,7 +3,7 @@ import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import clsx from 'clsx';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'quiet' | 'danger';
+  variant?: 'primary' | 'secondary' | 'quiet' | 'warning' | 'danger';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
 };
@@ -23,8 +23,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         variant === 'secondary' &&
           'border-black bg-[var(--action-secondary)] text-[var(--action-secondary-foreground)] hover:opacity-85',
         variant === 'quiet' && 'border-transparent bg-transparent text-foreground hover:bg-muted',
+        variant === 'warning' &&
+          'border-warning/50 bg-warning/10 text-warning hover:bg-warning/20',
         variant === 'danger' &&
-          'border-black bg-[var(--action-secondary)] text-[var(--action-secondary-foreground)] hover:opacity-85',
+          'border-danger/50 bg-danger/10 text-danger hover:bg-danger/20',
         size === 'sm' && 'min-h-9 px-3 text-sm',
         size === 'md' && 'px-4 text-sm',
         size === 'lg' && 'min-h-12 px-5',
