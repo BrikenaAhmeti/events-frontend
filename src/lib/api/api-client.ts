@@ -64,7 +64,12 @@ async function toError(response: Response): Promise<ApiError> {
   }
 }
 
-async function request<T>(path: string, options: RequestOptions = {}, retried = false): Promise<T> {
+async function request<T>(
+  path: string,
+  options: RequestOptions = {},
+  refreshRetried = false,
+  csrfRetried = false,
+): Promise<T> {
   const method = (options.method ?? 'GET').toUpperCase();
   const headers = new Headers(options.headers);
   if (isMutation(method)) headers.set('X-CSRF-Token', await obtainCsrf());
@@ -81,10 +86,24 @@ async function request<T>(path: string, options: RequestOptions = {}, retried = 
     body,
     credentials: 'include',
   });
-  if (response.status === 401 && !retried && !options.skipRefresh && !path.startsWith('/auth/')) {
-    if (await refresh()) return request<T>(path, options, true);
+  const requestError = response.ok ? null : await toError(response);
+  if (
+    requestError?.response.code === 'CSRF_VALIDATION_FAILED' &&
+    isMutation(method) &&
+    !csrfRetried
+  ) {
+    csrfToken = null;
+    return request<T>(path, options, refreshRetried, true);
   }
-  if (!response.ok) throw await toError(response);
+  if (
+    response.status === 401 &&
+    !refreshRetried &&
+    !options.skipRefresh &&
+    !path.startsWith('/auth/')
+  ) {
+    if (await refresh()) return request<T>(path, options, true, csrfRetried);
+  }
+  if (requestError) throw requestError;
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
