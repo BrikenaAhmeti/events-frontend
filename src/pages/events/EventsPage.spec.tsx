@@ -124,3 +124,85 @@ describe('EventsPage destructive actions', () => {
     await waitFor(() => expect(deleteRequests).toBe(1));
   });
 });
+
+describe('EventsPage event creation', () => {
+  it('lets a platform administrator start creating an event before selecting a client filter', async () => {
+    server.use(
+      http.get(`${api}/auth/me`, () =>
+        HttpResponse.json({
+          userId: 'platform-admin',
+          email: 'platform@example.test',
+          firstName: 'Platform',
+          lastName: 'Admin',
+          platformRole: 'SUPER_ADMIN',
+          memberships: [],
+        }),
+      ),
+      http.get(`${api}/events/directory/clients`, () =>
+        HttpResponse.json([
+          { id: 'client-a', name: 'Northstar Events', slug: 'northstar-events', status: 'ACTIVE' },
+        ]),
+      ),
+      http.get(`${api}/events/directory/creators`, () => HttpResponse.json([])),
+      http.get(`${api}/events`, () =>
+        HttpResponse.json({
+          items: [event],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        }),
+      ),
+    );
+
+    renderApp(
+      <MemoryRouter initialEntries={['/app/events']}>
+        <EventsPage />
+      </MemoryRouter>,
+    );
+
+    const createLink = await screen.findByRole('link', { name: 'Create event' });
+    expect(createLink).toHaveAttribute('href', '/app/events/new');
+  });
+});
+
+describe('EventsPage filters', () => {
+  it('filters events by workflow status', async () => {
+    let requestedStatus: string | null = null;
+    server.use(
+      http.get(`${api}/auth/me`, () =>
+        HttpResponse.json({
+          userId: 'user-a',
+          email: 'admin@example.test',
+          firstName: 'Morgan',
+          lastName: 'Reed',
+          platformRole: null,
+          memberships: [
+            {
+              clientId: 'client-a',
+              role: 'CLIENT_ADMIN',
+              status: 'ACTIVE',
+              permissions: [],
+            },
+          ],
+        }),
+      ),
+      http.get(`${api}/events/directory/creators`, () => HttpResponse.json([])),
+      http.get(`${api}/events`, ({ request }) => {
+        requestedStatus = new URL(request.url).searchParams.get('status');
+        return HttpResponse.json({
+          items: [event],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      }),
+    );
+
+    renderApp(
+      <MemoryRouter initialEntries={['/app/events']}>
+        <EventsPage />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Event status' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Published' }));
+
+    await waitFor(() => expect(requestedStatus).toBe('PUBLISHED'));
+  });
+});

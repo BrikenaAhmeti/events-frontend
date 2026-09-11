@@ -27,17 +27,30 @@ async function obtainCsrf(): Promise<string> {
   return body.csrfToken;
 }
 
+async function performRefresh(csrfRetried = false): Promise<boolean> {
+  const token = await obtainCsrf();
+  const response = await fetch(`${API_URL}/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'X-CSRF-Token': token },
+  });
+  if (response.ok) return true;
+
+  const error = await toError(response);
+  if (error.response.code === 'CSRF_VALIDATION_FAILED' && !csrfRetried) {
+    csrfToken = null;
+    return performRefresh(true);
+  }
+  return false;
+}
+
 async function refresh(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = (async () => {
       try {
-        const token = await obtainCsrf();
-        const response = await fetch(`${API_URL}/auth/refresh`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'X-CSRF-Token': token },
-        });
-        return response.ok;
+        return await performRefresh();
+      } catch {
+        return false;
       } finally {
         refreshPromise = null;
       }
@@ -99,7 +112,7 @@ async function request<T>(
     response.status === 401 &&
     !refreshRetried &&
     !options.skipRefresh &&
-    !path.startsWith('/auth/')
+    path !== '/auth/refresh'
   ) {
     if (await refresh()) return request<T>(path, options, true, csrfRetried);
   }

@@ -40,6 +40,7 @@ export function EventsPage() {
   );
   const [search, setSearch] = useState('');
   const [lifecycle, setLifecycle] = useState('');
+  const [status, setStatus] = useState('');
   const [date, setDate] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -52,6 +53,8 @@ export function EventsPage() {
   const isSuperAdmin = user?.platformRole === 'SUPER_ADMIN';
   const mayRead = Boolean(user && can(user, 'EVENT_READ', clientId || undefined));
   const mayCreate = Boolean(user && can(user, 'EVENT_CREATE', clientId || undefined));
+  const mayStartCreation = mayCreate && (Boolean(clientId) || isSuperAdmin);
+  const createEventPath = `/app/events/new${clientId ? `?clientId=${clientId}` : ''}`;
   const clients = useQuery({
     queryKey: ['event-client-directory'],
     queryFn: ({ signal }) => apiClient.get<Client[]>('/events/directory/clients', signal),
@@ -73,6 +76,7 @@ export function EventsPage() {
           clientId,
           search,
           lifecycle,
+          status,
           date,
           from,
           to,
@@ -80,7 +84,7 @@ export function EventsPage() {
           cursor: cursors.at(-1),
         }).filter(([, value]) => value),
       ) as Record<string, string>,
-    [clientId, search, lifecycle, date, from, to, createdByUserId, cursors],
+    [clientId, search, lifecycle, status, date, from, to, createdByUserId, cursors],
   );
   const events = useQuery({
     queryKey: eventKeys.list(filters),
@@ -106,6 +110,7 @@ export function EventsPage() {
   const clearFilters = () => {
     setSearch('');
     setLifecycle('');
+    setStatus('');
     setDate('');
     setFrom('');
     setTo('');
@@ -118,8 +123,8 @@ export function EventsPage() {
         title={t('title')}
         description={t('subtitle')}
         action={
-          mayCreate && clientId ? (
-            <Link to={`/app/events/new?clientId=${clientId}`}>
+          mayStartCreation ? (
+            <Link to={createEventPath}>
               <Button>{t('create')}</Button>
             </Link>
           ) : undefined
@@ -175,6 +180,22 @@ export function EventsPage() {
             ]}
             onChange={(value) => {
               setLifecycle(value);
+              resetPage();
+            }}
+          />
+          <CustomSelect
+            label={t('workflowStatus')}
+            icon={ListFilter}
+            value={status}
+            options={[
+              { value: '', label: t('allStatuses') },
+              ...['DRAFT', 'READY', 'PUBLISHED', 'CANCELLED', 'ARCHIVED'].map((value) => ({
+                value,
+                label: t(`statuses.${value}`, { ns: 'common' }),
+              })),
+            ]}
+            onChange={(value) => {
+              setStatus(value);
               resetPage();
             }}
           />
@@ -389,8 +410,8 @@ export function EventsPage() {
           icon={CalendarDays}
           title={t('noEvents')}
           action={
-            mayCreate && clientId ? (
-              <Link to={`/app/events/new?clientId=${clientId}`}>
+            mayStartCreation ? (
+              <Link to={createEventPath}>
                 <Button>{t('create')}</Button>
               </Link>
             ) : undefined

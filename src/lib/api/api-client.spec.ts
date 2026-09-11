@@ -45,4 +45,57 @@ describe('apiClient CSRF recovery', () => {
     expect(csrfRequests).toBe(2);
     expect(loginRequests).toBe(2);
   });
+
+  it('refreshes an expired access token for auth/me and retries stale CSRF once', async () => {
+    let csrfRequests = 0;
+    let refreshRequests = 0;
+    let meRequests = 0;
+    server.use(
+      http.get(`${api}/auth/csrf`, () => {
+        csrfRequests += 1;
+        return HttpResponse.json({ csrfToken: `refresh-csrf-${csrfRequests}` });
+      }),
+      http.post(`${api}/auth/refresh`, ({ request }) => {
+        refreshRequests += 1;
+        if (refreshRequests === 1) {
+          expect(request.headers.get('x-csrf-token')).toBe('refresh-csrf-1');
+          return HttpResponse.json(
+            {
+              statusCode: 403,
+              code: 'CSRF_VALIDATION_FAILED',
+              message: 'Security token validation failed.',
+              details: {},
+              requestId: 'request-refresh-1',
+            },
+            { status: 403 },
+          );
+        }
+        expect(request.headers.get('x-csrf-token')).toBe('refresh-csrf-2');
+        return new HttpResponse(null, { status: 204 });
+      }),
+      http.get(`${api}/auth/me`, () => {
+        meRequests += 1;
+        if (meRequests === 1) {
+          return HttpResponse.json(
+            {
+              statusCode: 401,
+              code: 'UNAUTHENTICATED',
+              message: 'Authentication is required.',
+              details: {},
+              requestId: 'request-me-1',
+            },
+            { status: 401 },
+          );
+        }
+        return HttpResponse.json({ userId: 'user-1' });
+      }),
+    );
+
+    await expect(apiClient.get<{ userId: string }>('/auth/me')).resolves.toEqual({
+      userId: 'user-1',
+    });
+    expect(csrfRequests).toBe(2);
+    expect(refreshRequests).toBe(2);
+    expect(meRequests).toBe(2);
+  });
 });

@@ -33,7 +33,7 @@ describe('AppLayout role navigation', () => {
     renderFor({ ...baseUser, platformRole: 'SUPER_ADMIN' });
     expect(await screen.findByRole('link', { name: 'Clients' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Events' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Team' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Team' })).not.toBeInTheDocument();
   });
 
   it('shows all client operations to a client administrator', async () => {

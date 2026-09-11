@@ -80,4 +80,26 @@ describe('ConciergeWorkspace', () => {
       await screen.findByText('Concierge could not respond. Please try again.'),
     ).toBeInTheDocument();
   });
+
+  it('shows the shareable guest link and QR code inside the organizer conversation', async () => {
+    server.use(
+      http.get('http://localhost:3000/api/v1/events/event-a/concierge/messages', () =>
+        HttpResponse.json({ id: null, messages: [] }),
+      ),
+    );
+
+    renderApp(
+      <ConciergeWorkspace
+        eventId="event-a"
+        shareAccess={{
+          url: 'https://events.example.test/e/leadership-forum',
+          qrSvg: '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+        }}
+      />,
+    );
+
+    expect(await screen.findByText('Guest access is ready to share')).toBeInTheDocument();
+    expect(screen.getByText('https://events.example.test/e/leadership-forum')).toBeInTheDocument();
+    expect(screen.getByAltText('Guest access QR code')).toBeInTheDocument();
+  });
 });

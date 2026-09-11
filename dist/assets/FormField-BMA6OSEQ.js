@@ -1,2 +1,0 @@
-import{j as e}from"./index-DB-X9tGO.js";function c({label:l,htmlFor:a,error:s,hint:t,children:x}){return e.jsxs("div",{className:"space-y-1.5",children:[e.jsx("label",{htmlFor:a,className:"block text-sm font-semibold",children:l}),x,t&&!s&&e.jsx("p",{className:"text-xs text-muted-foreground",children:t}),s&&e.jsx("p",{className:"text-sm text-danger",role:"alert",children:s})]})}export{c as F};
-//# sourceMappingURL=FormField-BMA6OSEQ.js.map

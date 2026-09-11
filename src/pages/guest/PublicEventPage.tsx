@@ -22,7 +22,6 @@ type PublicEvent = {
   startAt: string | null;
   endAt: string | null;
   timezone: string | null;
-  organizerName: string | null;
   accessState: AccessState;
 };
 const schema = z.object({ fullName: z.string().min(2), email: z.email() });

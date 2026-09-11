@@ -7,7 +7,39 @@
       "destination": "https://events-backend-tau.vercel.app/api/:path*"
     },
     {
-      "source": "/(.*)",
+      "source": "/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/login",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/forgot-password",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/activate",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/reset-password",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/app/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/e/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/i/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/guest/:path*",
       "destination": "/index.html"
     }
   ]

@@ -54,7 +54,7 @@ export function ClientsPage() {
           <div className="hidden grid-cols-[minmax(0,2fr)_1fr_1fr_1fr] gap-4 border-b border-border px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground md:grid">
             <span>{t('organization')}</span>
             <span>{t('events')}</span>
-            <span>{t('team')}</span>
+            <span>{t('staff')}</span>
             <span>{t('status')}</span>
           </div>
           {clients.data.items.map((client) => (
@@ -72,7 +72,7 @@ export function ClientsPage() {
                 {client._count?.events ?? 0}
               </p>
               <p className="text-sm">
-                <span className="md:hidden">{t('team')}: </span>
+                <span className="md:hidden">{t('staff')}: </span>
                 {client._count?.memberships ?? 0}
               </p>
               <div>

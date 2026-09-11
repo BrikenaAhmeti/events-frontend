@@ -23,8 +23,8 @@ import type { Client, EventSummary } from '../../types/domain';
 type ClientDetail = Client & {
   memberships: Array<{
     id: string;
-    role: string;
-    status: string;
+    role: 'CLIENT_ADMIN' | 'CLIENT_STAFF';
+    status: 'INVITED' | 'ACTIVE' | 'DISABLED';
     user: { id: string; firstName: string; lastName: string; email: string };
   }>;
   events: EventSummary[];
@@ -68,6 +68,8 @@ export function ClientDetailPage() {
       </div>
     );
   if (!client.data) return null;
+  const administrators = client.data.memberships.filter(({ role }) => role === 'CLIENT_ADMIN');
+  const staff = client.data.memberships.filter(({ role }) => role === 'CLIENT_STAFF');
   return (
     <div>
       <PageHeader
@@ -97,65 +99,110 @@ export function ClientDetailPage() {
           </div>
         }
       />
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
         <section className="rounded-xl border border-border bg-surface p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="font-display text-2xl">{t('events')}</h2>
-            <Link
-              className="text-sm font-semibold text-primary"
-              to={`/app/events?clientId=${clientId}`}
-            >
-              {t('viewAll', { ns: 'common' })}
-            </Link>
-          </div>
-          <div className="mt-4 space-y-2">
-            {client.data.events.map((event) => (
-              <Link
-                key={event.id}
-                to={`/app/events/${event.id}`}
-                className="flex items-center gap-3 rounded-lg border border-border p-3 hover:bg-muted"
-              >
-                <CalendarDays className="size-4 text-primary" />
-                <span className="min-w-0 flex-1 truncate font-semibold">{event.name}</span>
-                <StatusBadge status={event.status} />
-              </Link>
-            ))}
-          </div>
+          <h2 className="font-display text-2xl">{t('details')}</h2>
+          <dl className="mt-4 divide-y divide-border rounded-lg border border-border">
+            <div className="grid gap-1 p-4 sm:grid-cols-[9rem_1fr] sm:gap-4">
+              <dt className="text-sm font-semibold text-muted-foreground">{t('name')}</dt>
+              <dd className="font-semibold">{client.data.name}</dd>
+            </div>
+            <div className="grid gap-1 p-4 sm:grid-cols-[9rem_1fr] sm:gap-4">
+              <dt className="text-sm font-semibold text-muted-foreground">{t('contact')}</dt>
+              <dd>{client.data.contactEmail ?? t('notProvided')}</dd>
+            </div>
+            <div className="grid gap-1 p-4 sm:grid-cols-[9rem_1fr] sm:items-center sm:gap-4">
+              <dt className="text-sm font-semibold text-muted-foreground">{t('status')}</dt>
+              <dd>
+                <StatusBadge status={client.data.status} />
+              </dd>
+            </div>
+            <div className="grid gap-1 p-4 sm:grid-cols-[9rem_1fr] sm:gap-4">
+              <dt className="text-sm font-semibold text-muted-foreground">{t('administrator')}</dt>
+              <dd className="space-y-2">
+                {administrators.length
+                  ? administrators.map(({ id, user: administrator }) => (
+                      <div key={id}>
+                        <p className="font-semibold">
+                          {administrator.firstName} {administrator.lastName}
+                        </p>
+                        <p className="text-sm text-muted-foreground">{administrator.email}</p>
+                      </div>
+                    ))
+                  : t('notAssigned')}
+              </dd>
+            </div>
+          </dl>
         </section>
         <section className="rounded-xl border border-border bg-surface p-5">
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-2xl">{t('team')}</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="font-display text-2xl">{t('staff')}</h2>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-bold">
+                {staff.length}
+              </span>
+            </div>
             <Link
               className="text-sm font-semibold text-primary"
               to={`/app/team?clientId=${clientId}`}
             >
-              {t('manage')}
+              {t('manageStaff')}
             </Link>
           </div>
           <div className="mt-4 space-y-2">
-            {client.data.memberships.map((membership) => (
-              <div
-                key={membership.id}
-                className="flex items-center gap-3 rounded-lg border border-border p-3"
-              >
-                <span className="grid size-9 place-items-center rounded-full bg-accent">
-                  <Users className="size-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold">
-                    {membership.user.firstName} {membership.user.lastName}
-                  </p>
-                  <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
-                    <Mail className="size-3" />
-                    {membership.user.email}
-                  </p>
+            {staff.length ? (
+              staff.map((membership) => (
+                <div
+                  key={membership.id}
+                  className="flex items-center gap-3 rounded-lg border border-border p-3"
+                >
+                  <span className="grid size-9 place-items-center rounded-full bg-accent">
+                    <Users className="size-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">
+                      {membership.user.firstName} {membership.user.lastName}
+                    </p>
+                    <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                      <Mail className="size-3" />
+                      {membership.user.email}
+                    </p>
+                  </div>
+                  <StatusBadge status={membership.status} />
                 </div>
-                <StatusBadge status={membership.status} />
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
+                {t('noStaff')}
+              </p>
+            )}
           </div>
         </section>
       </div>
+      <section className="mt-5 rounded-xl border border-border bg-surface p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-2xl">{t('events')}</h2>
+          <Link
+            className="text-sm font-semibold text-primary"
+            to={`/app/events?clientId=${clientId}`}
+          >
+            {t('viewAll', { ns: 'common' })}
+          </Link>
+        </div>
+        <div className="mt-4 space-y-2">
+          {client.data.events.map((event) => (
+            <Link
+              key={event.id}
+              to={`/app/events/${event.id}`}
+              className="flex items-center gap-3 rounded-lg border border-border p-3 hover:bg-muted"
+            >
+              <CalendarDays className="size-4 text-primary" />
+              <span className="min-w-0 flex-1 truncate font-semibold">{event.name}</span>
+              <StatusBadge status={event.status} />
+            </Link>
+          ))}
+        </div>
+      </section>
       {settingsOpen && (
         <ClientSettingsDialog client={client.data} close={() => setSettingsOpen(false)} />
       )}

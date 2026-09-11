@@ -8,6 +8,7 @@ export const useCurrentUser = () =>
     queryKey: authKeys.me(),
     queryFn: ({ signal }) => apiClient.get<CurrentUser>('/auth/me', signal),
     staleTime: 60_000,
+    refetchOnWindowFocus: true,
     retry: (count, error) =>
       !(error instanceof ApiError && error.response.statusCode === 401) && count < 1,
   });

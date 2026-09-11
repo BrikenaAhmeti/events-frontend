@@ -5,6 +5,7 @@ import { Skeleton } from '../../components/atoms/Skeleton';
 import { ProtectedRoute } from '../../features/auth/ProtectedRoute';
 import { AppLayout } from '../../layouts/AppLayout';
 import { GuestLayout } from '../../layouts/GuestLayout';
+import { ErrorPage, RouteErrorBoundary } from '../../pages/errors/ErrorPage';
 
 const load = <T extends Record<string, ComponentType>>(factory: () => Promise<T>, name: keyof T) =>
   lazy(async () => ({ default: (await factory())[name] }));
@@ -44,8 +45,6 @@ const InvitationExchangePage = load(
   'InvitationExchangePage',
 );
 const GuestEventPage = load(() => import('../../pages/guest/GuestEventPage'), 'GuestEventPage');
-const ErrorPage = load(() => import('../../pages/errors/ErrorPage'), 'ErrorPage');
-
 function RouteFallback() {
   const { t } = useTranslation('common');
   return (
@@ -62,50 +61,55 @@ const suspense = (element: React.ReactNode) => (
 );
 
 export const router = createBrowserRouter([
-  { path: '/', element: <Navigate to="/login" replace /> },
-  { path: '/login', element: suspense(<LoginPage />) },
-  { path: '/forgot-password', element: suspense(<ForgotPasswordPage />) },
-  { path: '/activate', element: suspense(<ActivationPage />) },
-  { path: '/reset-password', element: suspense(<ActivationPage recovery />) },
   {
-    element: <ProtectedRoute />,
+    errorElement: <RouteErrorBoundary />,
     children: [
+      { path: '/', element: <Navigate to="/login" replace /> },
+      { path: '/login', element: suspense(<LoginPage />) },
+      { path: '/forgot-password', element: suspense(<ForgotPasswordPage />) },
+      { path: '/activate', element: suspense(<ActivationPage />) },
+      { path: '/reset-password', element: suspense(<ActivationPage recovery />) },
       {
-        path: '/app',
-        element: <AppLayout />,
+        element: <ProtectedRoute />,
         children: [
-          { index: true, element: suspense(<DashboardPage />) },
-          { path: 'dashboard', element: suspense(<DashboardPage />) },
-          { path: 'profile', element: suspense(<ProfilePage />) },
-          { path: 'clients', element: suspense(<ClientsPage />) },
-          { path: 'clients/:clientId', element: suspense(<ClientDetailPage />) },
-          { path: 'team', element: suspense(<TeamPage />) },
-          { path: 'events', element: suspense(<EventsPage />) },
-          { path: 'events/new', element: suspense(<CreateEventPage />) },
           {
-            path: 'events/:eventId',
-            element: suspense(<EventLayout />),
+            path: '/app',
+            element: <AppLayout />,
             children: [
-              { index: true, element: suspense(<EventOverviewPage />) },
-              { path: 'concierge', element: suspense(<ConciergePage />) },
-              { path: 'guests', element: suspense(<GuestsPage />) },
-              { path: 'documents', element: suspense(<DocumentsPage />) },
-              { path: 'invitations', element: suspense(<InvitationsPage />) },
-              { path: 'schedule', element: suspense(<SchedulePage />) },
+              { index: true, element: suspense(<DashboardPage />) },
+              { path: 'dashboard', element: suspense(<DashboardPage />) },
+              { path: 'profile', element: suspense(<ProfilePage />) },
+              { path: 'clients', element: suspense(<ClientsPage />) },
+              { path: 'clients/:clientId', element: suspense(<ClientDetailPage />) },
+              { path: 'team', element: suspense(<TeamPage />) },
+              { path: 'events', element: suspense(<EventsPage />) },
+              { path: 'events/new', element: suspense(<CreateEventPage />) },
+              {
+                path: 'events/:eventId',
+                element: suspense(<EventLayout />),
+                children: [
+                  { index: true, element: suspense(<EventOverviewPage />) },
+                  { path: 'concierge', element: suspense(<ConciergePage />) },
+                  { path: 'guests', element: suspense(<GuestsPage />) },
+                  { path: 'documents', element: suspense(<DocumentsPage />) },
+                  { path: 'invitations', element: suspense(<InvitationsPage />) },
+                  { path: 'schedule', element: suspense(<SchedulePage />) },
+                ],
+              },
+              { path: 'forbidden', element: suspense(<ErrorPage code={403} />) },
             ],
           },
-          { path: 'forbidden', element: suspense(<ErrorPage code={403} />) },
         ],
       },
+      {
+        element: <GuestLayout />,
+        children: [
+          { path: '/e/:slug', element: suspense(<PublicEventPage />) },
+          { path: '/i/:invitationToken', element: suspense(<InvitationExchangePage />) },
+          { path: '/guest/events/:eventId', element: suspense(<GuestEventPage />) },
+        ],
+      },
+      { path: '*', element: <Navigate to="/login" replace /> },
     ],
   },
-  {
-    element: <GuestLayout />,
-    children: [
-      { path: '/e/:slug', element: suspense(<PublicEventPage />) },
-      { path: '/i/:invitationToken', element: suspense(<InvitationExchangePage />) },
-      { path: '/guest/events/:eventId', element: suspense(<GuestEventPage />) },
-    ],
-  },
-  { path: '*', element: <Navigate to="/login" replace /> },
 ]);

@@ -36,7 +36,7 @@ function Navigation({ close }: { close?: () => void }) {
           to: `/app/team${clientId ? `?clientId=${clientId}` : ''}`,
           label: t('team'),
           icon: Users,
-          show: can(user, 'TEAM_READ', clientId),
+          show: user.platformRole !== 'SUPER_ADMIN' && can(user, 'TEAM_READ', clientId),
         },
       ]
     : [];

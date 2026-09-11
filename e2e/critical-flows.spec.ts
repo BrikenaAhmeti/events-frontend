@@ -282,8 +282,16 @@ test('platform administrator can search and filter the paginated all-client even
     (candidate) =>
       candidate.url().includes('/events?') && candidate.url().includes('lifecycle=UPCOMING'),
   );
-  await page.getByLabel('Timing status').selectOption('UPCOMING');
+  await page.getByRole('button', { name: 'Timing status' }).click();
+  await page.getByRole('option', { name: 'Upcoming' }).click();
   await request;
+  const statusRequest = page.waitForRequest(
+    (candidate) =>
+      candidate.url().includes('/events?') && candidate.url().includes('status=PUBLISHED'),
+  );
+  await page.getByRole('button', { name: 'Event status' }).click();
+  await page.getByRole('option', { name: 'Published' }).click();
+  await statusRequest;
   await page.getByPlaceholder('Search by event name').fill('Leadership');
   await expect(visibleEventLink).toBeVisible();
 });

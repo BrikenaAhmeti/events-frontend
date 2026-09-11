@@ -192,6 +192,14 @@ export function CreateEventPage() {
   });
   const updateDraft = (field: keyof Draft, value: string) =>
     setDraft((current) => ({ ...current, [field]: value }));
+  const selectClient = (nextClientId: string) => {
+    setClientId(nextClientId);
+    setDraft(emptyDraft);
+    setReviewed(false);
+    setSuggestedName('');
+    setNameDecision('pending');
+    setAnalyzedContent({ facts: [], schedule: [], extractedFacts: 0, extractedScheduleItems: 0 });
+  };
   const canSubmit =
     Boolean(clientId && draft.name.trim().length >= 2 && draft.category) &&
     nameDecision === 'accepted';
@@ -220,7 +228,7 @@ export function CreateEventPage() {
                 <Select
                   id="setup-client"
                   value={clientId}
-                  onChange={(event) => setClientId(event.target.value)}
+                  onChange={(event) => selectClient(event.target.value)}
                 >
                   <option value="">{t('selectClient')}</option>
                   {clients.data?.map((client) => (
