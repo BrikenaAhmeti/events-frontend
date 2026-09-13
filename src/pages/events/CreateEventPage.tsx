@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, FileText, MessageCircle, Paperclip, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Check, FileText, MessageCircle, Paperclip, Send, X } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/atoms/Button';
@@ -45,6 +45,7 @@ type Draft = {
 };
 
 type SetupAnalysis = {
+  message?: string;
   event: Partial<Draft>;
   suggestedName: string;
   nameWasProvided: boolean;
@@ -61,6 +62,12 @@ type SetupAnalysis = {
   extractedFacts: number;
   extractedScheduleItems: number;
   file: { name: string; size: number } | null;
+};
+
+type SetupStart = {
+  clientId: string;
+  clientName: string;
+  message: string;
 };
 
 const emptyDraft: Draft = {
@@ -125,27 +132,45 @@ export function CreateEventPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
+  const chatLogRef = useRef<HTMLDivElement>(null);
   const defaultClient = params.get('clientId') ?? (user ? activeClientId(user) : '') ?? '';
-  const [clientId, setClientId] = useState(defaultClient);
+  const [selectedClientId, setSelectedClientId] = useState(defaultClient);
+  const [confirmedClientId, setConfirmedClientId] = useState('');
   const [source, setSource] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [reviewed, setReviewed] = useState(false);
+  const [setupMessage, setSetupMessage] = useState('');
+  const [selectedClientMessage, setSelectedClientMessage] = useState('');
+  const [submittedSource, setSubmittedSource] = useState('');
+  const [submittedFileName, setSubmittedFileName] = useState('');
+  const [analysisMessage, setAnalysisMessage] = useState('');
   const [suggestedName, setSuggestedName] = useState('');
   const [nameDecision, setNameDecision] = useState<'accepted' | 'pending' | 'rejected'>('pending');
   const [analyzedContent, setAnalyzedContent] = useState<
     Pick<SetupAnalysis, 'facts' | 'schedule' | 'extractedFacts' | 'extractedScheduleItems'>
   >({ facts: [], schedule: [], extractedFacts: 0, extractedScheduleItems: 0 });
   const isSuperAdmin = user?.platformRole === 'SUPER_ADMIN';
+  const clientId = user ? (isSuperAdmin ? confirmedClientId : defaultClient) : '';
+  const setupReady = Boolean(clientId);
   const mayCreate = Boolean(user && can(user, 'EVENT_CREATE', clientId));
   const clients = useQuery({
     queryKey: isSuperAdmin ? ['event-client-directory'] : clientKeys.list(),
     queryFn: async ({ signal }) => {
-      if (isSuperAdmin)
-        return apiClient.get<Client[]>('/events/directory/clients', signal);
+      if (isSuperAdmin) return apiClient.get<Client[]>('/events/directory/clients', signal);
       return (await apiClient.get<Page<Client>>('/clients', signal)).items;
     },
     enabled: Boolean(user),
+  });
+  const start = useMutation({
+    mutationFn: (nextClientId: string) =>
+      apiClient.post<SetupStart>('/events/setup/start', {
+        clientId: nextClientId,
+      }),
+    onSuccess: (result) => {
+      setConfirmedClientId(result.clientId);
+      setSetupMessage(result.message);
+    },
   });
   const analyze = useMutation({
     mutationFn: () =>
@@ -154,6 +179,11 @@ export function CreateEventPage() {
         { clientId, ...(source.trim() ? { text: source.trim() } : {}) },
         file ?? undefined,
       ),
+    onMutate: () => {
+      setSubmittedSource(source.trim());
+      setSubmittedFileName(file?.name ?? '');
+      setAnalysisMessage('');
+    },
     onSuccess: (result) => {
       setDraft({
         ...emptyDraft,
@@ -163,6 +193,7 @@ export function CreateEventPage() {
         endAt: asLocalDateTime(result.event.endAt),
       });
       setSuggestedName(result.suggestedName);
+      setAnalysisMessage(result.message ?? t('reviewCompleteMessage'));
       setNameDecision(result.nameWasProvided ? 'accepted' : 'pending');
       setAnalyzedContent({
         facts: result.facts ?? [],
@@ -193,17 +224,53 @@ export function CreateEventPage() {
   const updateDraft = (field: keyof Draft, value: string) =>
     setDraft((current) => ({ ...current, [field]: value }));
   const selectClient = (nextClientId: string) => {
-    setClientId(nextClientId);
+    setSelectedClientId(nextClientId);
+    setConfirmedClientId('');
+    setSetupMessage('');
+    setSelectedClientMessage('');
+    setSubmittedSource('');
+    setSubmittedFileName('');
+    setAnalysisMessage('');
+    start.reset();
+    analyze.reset();
     setDraft(emptyDraft);
     setReviewed(false);
     setSuggestedName('');
     setNameDecision('pending');
-    setAnalyzedContent({ facts: [], schedule: [], extractedFacts: 0, extractedScheduleItems: 0 });
+    setAnalyzedContent({
+      facts: [],
+      schedule: [],
+      extractedFacts: 0,
+      extractedScheduleItems: 0,
+    });
+  };
+  const saveClient = () => {
+    const selectedClient = clients.data?.find((client) => client.id === selectedClientId);
+    setSelectedClientMessage(selectedClient?.name ?? t('client'));
+    start.mutate(selectedClientId);
+  };
+  const submitBrief = () => {
+    if (!setupReady || analyze.isPending || reviewed || (!source.trim() && !file)) return;
+    analyze.mutate();
+  };
+  const handleBriefSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    submitBrief();
+  };
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    submitBrief();
   };
   const canSubmit =
     Boolean(clientId && draft.name.trim().length >= 2 && draft.category) &&
     nameDecision === 'accepted';
   const draftCompleteness = evaluateDraft(draft);
+  const composerDisabled = !setupReady || start.isPending || analyze.isPending || reviewed;
+  useEffect(() => {
+    const chatLog = chatLogRef.current;
+    if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
+  }, [analysisMessage, analyze.isPending, nameDecision, reviewed, setupMessage, start.isPending]);
   if (user && !isSuperAdmin && defaultClient && !mayCreate)
     return <Navigate to="/app/forbidden" replace />;
   return (
@@ -213,22 +280,30 @@ export function CreateEventPage() {
         title={t('createTitle')}
         description={t('createChatIntro')}
       />
-      <section className="overflow-hidden rounded-2xl border border-border bg-surface">
+      <section className="flex h-[calc(100dvh-13rem)] min-h-[38rem] max-h-[56rem] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
         <header className="border-b border-border bg-surface-sunken/45 p-5 sm:p-6">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
             {t('guidedSetup')}
           </p>
           <h2 className="mt-2 font-display text-3xl">{t('tellConcierge')}</h2>
         </header>
-        <div className="space-y-5 p-4 sm:p-6" aria-live="polite">
+        <div
+          ref={chatLogRef}
+          className="flex-1 space-y-5 overflow-y-auto bg-surface-sunken/20 p-4 sm:p-6"
+          role="log"
+          aria-live="polite"
+          aria-label={t('setupConversation')}
+        >
           <ChatBubble>{t('setupWelcome')}</ChatBubble>
           {isSuperAdmin && (
             <ChatBubble>
+              <p className="mb-4 text-sm text-muted-foreground">{t('chooseClientPrompt')}</p>
               <FormField label={t('client')} htmlFor="setup-client">
                 <Select
                   id="setup-client"
-                  value={clientId}
+                  value={selectedClientId}
                   onChange={(event) => selectClient(event.target.value)}
+                  disabled={start.isPending || analyze.isPending || create.isPending}
                 >
                   <option value="">{t('selectClient')}</option>
                   {clients.data?.map((client) => (
@@ -238,60 +313,41 @@ export function CreateEventPage() {
                   ))}
                 </Select>
               </FormField>
+              <Button
+                className="mt-3"
+                size="sm"
+                loading={start.isPending}
+                disabled={!selectedClientId || selectedClientId === confirmedClientId}
+                onClick={saveClient}
+              >
+                <Check className="size-4" />
+                {t('saveClientSelection')}
+              </Button>
             </ChatBubble>
           )}
-          <div className="ml-auto max-w-[94%] rounded-2xl rounded-br-md bg-primary p-4 text-primary-foreground sm:max-w-[82%]">
-            <label className="text-sm font-semibold" htmlFor="event-source">
-              {t('eventBrief')}
-            </label>
-            <Textarea
-              id="event-source"
-              className="mt-2 min-h-32 border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/60"
-              value={source}
-              onChange={(event) => setSource(event.target.value)}
-              placeholder={t('eventBriefPlaceholder')}
-              maxLength={80_000}
-            />
-            <input
-              ref={fileRef}
-              className="sr-only"
-              type="file"
-              accept=".pdf,.docx,.txt,.csv,.xlsx"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-            />
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => fileRef.current?.click()}
-              >
-                <Paperclip className="size-4" />
-                {t('attachEventFile')}
-              </Button>
-              {file && (
-                <span className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-primary-foreground/10 px-3 text-xs">
+          {selectedClientMessage && (
+            <UserChatBubble>
+              <span className="text-xs font-semibold uppercase tracking-wide opacity-70">
+                {t('client')}
+              </span>
+              <span className="mt-1 block">{selectedClientMessage}</span>
+            </UserChatBubble>
+          )}
+          {start.isPending && <TypingBubble label={t('preparingNextStep')} />}
+          {setupMessage && <ChatBubble>{setupMessage}</ChatBubble>}
+          {start.error && <ChatBubble danger>{start.error.message}</ChatBubble>}
+          {(submittedSource || submittedFileName) && (
+            <UserChatBubble>
+              {submittedSource && <p className="whitespace-pre-wrap">{submittedSource}</p>}
+              {submittedFileName && (
+                <span className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary-foreground/10 px-3 py-2 text-xs">
                   <FileText className="size-4" />
-                  {file.name}
-                  <button type="button" onClick={() => setFile(null)} aria-label={t('removeFile')}>
-                    <X className="size-4" />
-                  </button>
+                  {submittedFileName}
                 </span>
               )}
-            </div>
-          </div>
-          {!reviewed && (
-            <div className="flex justify-end">
-              <Button
-                size="lg"
-                loading={analyze.isPending}
-                disabled={!clientId || (!source.trim() && !file)}
-                onClick={() => analyze.mutate()}
-              >
-                {t('reviewEventInformation')}
-              </Button>
-            </div>
+            </UserChatBubble>
           )}
+          {analyze.isPending && <TypingBubble label={t('reviewingEventInformation')} />}
           {analyze.error && (
             <ChatBubble danger>
               <p>{analyze.error.message}</p>
@@ -310,6 +366,7 @@ export function CreateEventPage() {
           )}
           {reviewed && (
             <>
+              {analysisMessage && <ChatBubble>{analysisMessage}</ChatBubble>}
               {nameDecision === 'pending' && (
                 <ChatBubble>
                   <p className="font-semibold">{t('nameSuggestion')}</p>
@@ -355,7 +412,7 @@ export function CreateEventPage() {
                 </ChatBubble>
               )}
               {nameDecision === 'accepted' && (
-                <ChatBubble>
+                <ChatBubble wide>
                   <p className="flex items-center gap-2 font-semibold">
                     <Check className="size-4 text-success" />
                     {t('detailsReviewed')}
@@ -390,18 +447,135 @@ export function CreateEventPage() {
             </>
           )}
         </div>
+        <form className="border-t border-border bg-surface p-3 sm:p-4" onSubmit={handleBriefSubmit}>
+          <div
+            className={`rounded-2xl border bg-background p-2 shadow-sm transition ${composerDisabled ? 'border-border opacity-65' : 'border-input focus-within:border-focus focus-within:ring-2 focus-within:ring-focus/15'}`}
+          >
+            <label className="sr-only" htmlFor="event-source">
+              {t('eventBrief')}
+            </label>
+            <Textarea
+              id="event-source"
+              className="max-h-28 !min-h-14 !resize-none border-0 bg-transparent px-2 py-2 focus:border-transparent"
+              rows={2}
+              value={source}
+              onChange={(event) => setSource(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
+              placeholder={
+                !setupReady
+                  ? t('saveClientBeforeWriting')
+                  : reviewed
+                    ? t('eventInformationReceived')
+                    : t('eventBriefPlaceholder')
+              }
+              maxLength={80_000}
+              disabled={composerDisabled}
+            />
+            {file && (
+              <span className="mx-2 mb-2 inline-flex min-h-9 items-center gap-2 rounded-lg bg-muted px-3 text-xs text-foreground">
+                <FileText className="size-4" />
+                <span className="max-w-56 truncate">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setFile(null)}
+                  aria-label={t('removeFile')}
+                  disabled={composerDisabled}
+                >
+                  <X className="size-4" />
+                </button>
+              </span>
+            )}
+            <div className="flex items-center gap-2 border-t border-border/70 px-1 pt-2">
+              <input
+                ref={fileRef}
+                className="sr-only"
+                type="file"
+                accept=".pdf,.docx,.txt,.csv,.xlsx"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                disabled={composerDisabled}
+              />
+              <button
+                type="button"
+                className="grid size-10 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none"
+                onClick={() => fileRef.current?.click()}
+                aria-label={t('attachEventFile')}
+                title={t('attachEventFile')}
+                disabled={composerDisabled}
+              >
+                <Paperclip className="size-5" />
+              </button>
+              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                {!setupReady
+                  ? t('clientSelectionRequired')
+                  : reviewed
+                    ? t('continueAbove')
+                    : t('sendHint')}
+              </span>
+              <Button
+                type="submit"
+                size="sm"
+                className="size-10 min-h-10 shrink-0 rounded-full px-0"
+                disabled={composerDisabled || (!source.trim() && !file)}
+                aria-label={t('sendSetupMessage')}
+                title={t('sendSetupMessage')}
+              >
+                <Send className="size-4" />
+                <span className="sr-only">{t('sendSetupMessage')}</span>
+              </Button>
+            </div>
+          </div>
+        </form>
       </section>
     </div>
   );
 }
 
-function ChatBubble({ children, danger = false }: { children: React.ReactNode; danger?: boolean }) {
+function ChatBubble({
+  children,
+  danger = false,
+  wide = false,
+}: {
+  children: React.ReactNode;
+  danger?: boolean;
+  wide?: boolean;
+}) {
+  return (
+    <div className={`flex items-end gap-2 ${wide ? 'w-full' : ''}`} data-message-role="assistant">
+      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
+        <MessageCircle className="size-4" aria-hidden />
+      </span>
+      <div
+        className={`${wide ? 'w-[calc(100%-2.5rem)]' : 'max-w-[calc(94%-2.5rem)] sm:max-w-[82%]'} rounded-2xl rounded-bl-md border p-4 shadow-sm ${danger ? 'border-danger/30 bg-danger/10 text-danger' : 'border-border bg-surface-raised'}`}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function UserChatBubble({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className={`max-w-[94%] rounded-2xl rounded-bl-md border p-4 sm:max-w-[86%] ${danger ? 'border-danger/30 bg-danger/10 text-danger' : 'border-border bg-surface-raised'}`}
+      className="ml-auto max-w-[88%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground shadow-sm sm:max-w-[74%]"
+      data-message-role="user"
     >
-      <MessageCircle className="mb-3 size-5 text-primary" />
       {children}
+    </div>
+  );
+}
+
+function TypingBubble({ label }: { label: string }) {
+  return (
+    <div className="flex items-end gap-2" role="status" aria-label={label}>
+      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
+        <MessageCircle className="size-4" aria-hidden />
+      </span>
+      <div className="flex h-11 items-center gap-1 rounded-2xl rounded-bl-md border border-border bg-surface-raised px-4 shadow-sm">
+        <span className="sr-only">{label}</span>
+        <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-300ms] motion-reduce:animate-none" />
+        <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-150ms] motion-reduce:animate-none" />
+        <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground motion-reduce:animate-none" />
+      </div>
     </div>
   );
 }

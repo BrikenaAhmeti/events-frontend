@@ -296,6 +296,59 @@ test('platform administrator can search and filter the paginated all-client even
   await expect(visibleEventLink).toBeVisible();
 });
 
+test('platform administrator confirms a client before the chat composer unlocks', async ({
+  page,
+}) => {
+  let releaseStart: (() => void) | undefined;
+  const holdStart = new Promise<void>((resolve) => {
+    releaseStart = resolve;
+  });
+  await page.route(`${api}/**`, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/auth/me'))
+      return route.fulfill({
+        json: {
+          userId: 'platform-admin',
+          email: 'platform@example.test',
+          firstName: 'Platform',
+          lastName: 'Admin',
+          platformRole: 'SUPER_ADMIN',
+          memberships: [],
+        },
+      });
+    if (url.pathname.endsWith('/events/directory/clients'))
+      return route.fulfill({
+        json: [
+          { id: 'client-a', name: 'Northstar Events', slug: 'northstar', status: 'ACTIVE' },
+        ],
+      });
+    if (url.pathname.endsWith('/auth/csrf'))
+      return route.fulfill({ json: { csrfToken: 'e2e.csrf' } });
+    if (url.pathname.endsWith('/events/setup/start')) {
+      await holdStart;
+      return route.fulfill({
+        json: {
+          clientId: 'client-a',
+          clientName: 'Northstar Events',
+          message: 'Tell me everything you know about the event.',
+        },
+      });
+    }
+    return route.fulfill({ status: 404, json: { code: 'UNMOCKED_BROWSER_REQUEST' } });
+  });
+
+  await page.goto('/app/events/new');
+  const composer = page.getByLabel('Event information');
+  await expect(composer).toBeDisabled();
+  await page.getByLabel('Client').selectOption('client-a');
+  await expect(composer).toBeDisabled();
+  await page.getByRole('button', { name: 'Save and continue' }).click();
+  await expect(page.getByRole('status', { name: 'Preparing the next step' })).toBeVisible();
+  releaseStart?.();
+  await expect(page.getByText('Tell me everything you know about the event.')).toBeVisible();
+  await expect(composer).toBeEnabled();
+});
+
 test('event setup offers an accept or reject choice when the name is missing', async ({ page }) => {
   await page.route(`${api}/**`, async (route) => {
     const url = new URL(route.request().url());
@@ -351,7 +404,7 @@ test('event setup offers an accept or reject choice when the name is missing', a
 
   await page.goto('/app/events/new?clientId=client-a');
   await page.getByLabel('Event information').fill('A wedding celebration in Pristina next summer.');
-  await page.getByRole('button', { name: 'Review event information' }).click();
+  await page.getByRole('button', { name: 'Send message' }).click();
   await expect(page.getByText('Pristina Wedding Celebration 2027')).toBeVisible();
   await page.getByRole('button', { name: 'Reject' }).click();
   await page.getByLabel('What should this event be called?').fill('Arta & Leon Celebration');
@@ -528,7 +581,7 @@ test('client administrator completes the critical event operations flow', async 
   await page
     .getByLabel('Event information')
     .fill('Coastal Leadership Retreat in Cascais for the leadership team.');
-  await page.getByRole('button', { name: 'Review event information' }).click();
+  await page.getByRole('button', { name: 'Send message' }).click();
   await expect(page.getByText('Event information reviewed')).toBeVisible();
   await page.getByRole('button', { name: 'Create event workspace' }).click();
   await expect(page.getByRole('heading', { name: 'Coastal Leadership Retreat' })).toBeVisible();

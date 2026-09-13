@@ -27,6 +27,13 @@ describe('CreateEventPage platform administrator flow', () => {
           { id: 'client-a', name: 'Northstar Events', slug: 'northstar-events', status: 'ACTIVE' },
         ]),
       ),
+      http.post(`${api}/events/setup/start`, () =>
+        HttpResponse.json({
+          clientId: 'client-a',
+          clientName: 'Northstar Events',
+          message: 'Tell me everything you know about the event.',
+        }),
+      ),
       http.post(`${api}/events/setup/analyze`, () =>
         HttpResponse.json({
           event: { name: 'Leadership Forum', category: 'CONFERENCE' },
@@ -62,11 +69,12 @@ describe('CreateEventPage platform administrator flow', () => {
     );
 
     await userEvent.selectOptions(await screen.findByLabelText('Client'), 'client-a');
-    await userEvent.type(
-      screen.getByLabelText('Event information'),
-      'A leadership forum in Lisbon.',
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Review event information' }));
+    const composer = screen.getByLabelText('Event information');
+    expect(composer).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
+    await waitFor(() => expect(composer).toBeEnabled());
+    await userEvent.type(composer, 'A leadership forum in Lisbon.');
+    await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
     await userEvent.click(
       await screen.findByRole('button', { name: 'Create event workspace' }),
     );
@@ -99,6 +107,14 @@ describe('CreateEventPage platform administrator flow', () => {
           { id: 'client-b', name: 'Coastal Events', slug: 'coastal-events', status: 'ACTIVE' },
         ]),
       ),
+      http.post(`${api}/events/setup/start`, async ({ request }) => {
+        const body = (await request.json()) as { clientId: string };
+        return HttpResponse.json({
+          clientId: body.clientId,
+          clientName: body.clientId === 'client-a' ? 'Northstar Events' : 'Coastal Events',
+          message: 'Tell me everything you know about the event.',
+        });
+      }),
       http.post(`${api}/events/setup/analyze`, () =>
         HttpResponse.json({
           event: { name: 'Leadership Forum', category: 'CONFERENCE' },
@@ -128,18 +144,23 @@ describe('CreateEventPage platform administrator flow', () => {
 
     const clientSelect = await screen.findByLabelText('Client');
     await userEvent.selectOptions(clientSelect, 'client-a');
+    await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
+    await waitFor(() => expect(screen.getByLabelText('Event information')).toBeEnabled());
     await userEvent.type(
       screen.getByLabelText('Event information'),
       'A leadership forum in Lisbon.',
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Review event information' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
     expect(
       await screen.findByRole('button', { name: 'Create event workspace' }),
     ).toBeInTheDocument();
 
     await userEvent.selectOptions(clientSelect, 'client-b');
 
-    expect(screen.queryByRole('button', { name: 'Create event workspace' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Review event information' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Create event workspace' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Event information')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
   });
 });

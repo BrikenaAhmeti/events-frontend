@@ -151,12 +151,26 @@ export const en = {
     tellConcierge: 'Tell us about the event',
     setupWelcome:
       'Choose the client when required, then share everything you already know. You can write naturally, attach a file, or use both.',
+    setupConversation: 'Event setup conversation',
+    chooseClientPrompt:
+      'First, choose the client this event belongs to. Save your choice so I can prepare the right workspace.',
+    saveClientSelection: 'Save and continue',
+    preparingNextStep: 'Preparing the next step',
+    reviewingEventInformation: 'Reviewing event information',
     eventBrief: 'Event information',
     eventBriefPlaceholder:
       'For example: We are planning a three-day leadership retreat in Lisbon for 80 guests…',
+    saveClientBeforeWriting: 'Choose a client and save your selection to start the conversation.',
+    eventInformationReceived: 'Event information received. Continue with the details above.',
+    clientSelectionRequired: 'Save a client selection to unlock the message field.',
+    continueAbove: 'Review and complete the event details above.',
+    sendHint: 'Press Enter to send · Shift + Enter for a new line',
     attachEventFile: 'Attach event file',
     removeFile: 'Remove attached file',
     reviewEventInformation: 'Review event information',
+    sendSetupMessage: 'Send message',
+    reviewCompleteMessage:
+      'I’ve reviewed what you shared and organized it into the event details below.',
     enterManually: 'Enter details manually',
     nameSuggestion: 'No event name was provided. Would you like to use this suggestion?',
     acceptName: 'Accept name',
