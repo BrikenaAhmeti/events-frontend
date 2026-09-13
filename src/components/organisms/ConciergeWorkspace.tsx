@@ -1,17 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowUp,
-  CheckCircle2,
-  Copy,
-  Download,
-  MessageCircle,
-  Paperclip,
-  QrCode,
-} from 'lucide-react';
+import { ArrowUp, CheckCircle2, Copy, Download, Paperclip, QrCode } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../atoms/Button';
 import { Textarea } from '../atoms/Input';
+import { AssistantMessage, TypingIndicator, UserMessage } from '../molecules/ChatMessage';
 import { apiClient } from '../../lib/api/api-client';
 import { documentKeys, eventKeys } from '../../lib/api/query-keys';
 import { useEventSocket } from '../../lib/websocket/use-event-socket';
@@ -42,6 +35,8 @@ export function ConciergeWorkspace({
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasStreamingText, setHasStreamingText] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const messageRef = useRef<HTMLTextAreaElement>(null);
+  const chatLogRef = useRef<HTMLDivElement>(null);
   const streamErrorShown = useRef(false);
   const queryClient = useQueryClient();
   const history = useQuery({
@@ -173,6 +168,10 @@ export function ConciergeWorkspace({
       void queryClient.invalidateQueries({ queryKey: documentKeys.list(eventId) });
     },
   });
+  useEffect(() => {
+    const chatLog = chatLogRef.current;
+    if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
+  }, [messages, send.isPending, shareAccess, upload.isPending]);
   const submit = () => {
     const content = message.trim();
     if (!content || send.isPending) return;
@@ -184,21 +183,18 @@ export function ConciergeWorkspace({
   };
   return (
     <section
-      className="overflow-hidden rounded-2xl border border-border bg-surface"
+      className="flex h-[clamp(36rem,72dvh,52rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm"
       aria-labelledby="concierge-title"
     >
-      <header className="border-b border-border bg-surface-sunken/45 p-5 sm:p-6">
+      <header className="border-b border-border bg-surface-sunken/45 px-4 py-3.5 sm:px-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
               {t('eyebrow')}
             </p>
-            <h2 id="concierge-title" className="mt-2 font-display text-3xl">
+            <h2 id="concierge-title" className="mt-1 font-display text-2xl">
               {t('title')}
             </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-              {guest ? t('guestIntro') : t('organizerIntro')}
-            </p>
           </div>
           {!guest && socket.enabled && (
             <span
@@ -213,7 +209,7 @@ export function ConciergeWorkspace({
         </div>
         {!guest && allowPlanning && (
           <div
-            className="mt-5 inline-flex rounded-lg border border-border bg-surface p-1"
+            className="mt-3 inline-flex rounded-lg border border-border bg-surface p-1"
             role="group"
             aria-label={t('mode')}
           >
@@ -221,6 +217,7 @@ export function ConciergeWorkspace({
               type="button"
               className={`min-h-9 rounded-md px-3 text-sm font-semibold ${mode === 'plan' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
               onClick={() => setMode('plan')}
+              disabled={send.isPending}
             >
               {t('addDetails')}
             </button>
@@ -228,73 +225,82 @@ export function ConciergeWorkspace({
               type="button"
               className={`min-h-9 rounded-md px-3 text-sm font-semibold ${mode === 'ask' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
               onClick={() => setMode('ask')}
+              disabled={send.isPending}
             >
               {t('askQuestion')}
             </button>
           </div>
         )}
       </header>
-      <div className="min-h-[22rem] space-y-5 p-4 sm:min-h-[28rem] sm:p-6" aria-live="polite">
-        {messages.length === 0 && (
-          <div className="grid min-h-72 place-items-center text-center">
-            <div>
-              <span className="mx-auto grid size-12 place-items-center rounded-full bg-accent text-accent-foreground">
-                <MessageCircle className="size-5" />
-              </span>
-              <p className="mt-4 font-display text-xl">
+      <div
+        ref={chatLogRef}
+        className="flex-1 space-y-5 overflow-y-auto bg-surface-sunken/20 p-4 sm:p-6"
+        role="log"
+        aria-live="polite"
+        aria-label={t('conversation')}
+        aria-busy={history.isLoading || send.isPending || upload.isPending}
+      >
+        {history.isLoading && <TypingIndicator label={t('loadingConversation')} />}
+        {!history.isLoading && messages.length === 0 && (
+          <>
+            <AssistantMessage>
+              <p className="text-sm leading-6">
                 {guest ? t('guestWelcome') : t('organizerWelcome')}
               </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                {(guest
-                  ? [
-                      t('guestSuggestionToday'),
-                      t('guestSuggestionMeet'),
-                      t('guestSuggestionDinner'),
-                    ]
-                  : [t('organizerSuggestionPlan'), t('organizerSuggestionMissing')]
-                ).map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={() => setMessage(suggestion)}
-                    className="rounded-full border border-border bg-surface-raised px-3 py-2 text-xs font-semibold hover:bg-muted"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
+            </AssistantMessage>
+            <div className="ml-10 flex flex-wrap gap-2">
+              {(guest
+                ? [
+                    t('guestSuggestionToday'),
+                    t('guestSuggestionMeet'),
+                    t('guestSuggestionDinner'),
+                  ]
+                : [t('organizerSuggestionPlan'), t('organizerSuggestionMissing')]
+              ).map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => {
+                    setMessage(suggestion);
+                    messageRef.current?.focus();
+                  }}
+                  className="rounded-full border border-border bg-surface-raised px-3 py-2 text-xs font-semibold transition-colors hover:bg-muted"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {messages.map((item, index) =>
+          item.role === 'USER' ? (
+            <UserMessage key={item.id}>
+              <p className="whitespace-pre-wrap">{item.content}</p>
+            </UserMessage>
+          ) : (
+            <AssistantMessage key={item.id} danger={item.failed}>
+              <div className="text-sm leading-6">
+                {item.content === t('updated') && (
+                  <CheckCircle2 className="mb-2 size-5 text-success" />
+                )}
+                <span className="whitespace-pre-wrap">{item.content}</span>
+                {send.isPending &&
+                  hasStreamingText &&
+                  index === messages.length - 1 && (
+                    <span
+                      className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-primary align-middle motion-reduce:animate-none"
+                      aria-hidden
+                    />
+                  )}
               </div>
-            </div>
-          </div>
+            </AssistantMessage>
+          ),
         )}
-        {messages.map((item) => (
-          <article
-            key={item.id}
-            className={`flex ${item.role === 'USER' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 sm:max-w-[72%] ${item.role === 'USER' ? 'rounded-br-md bg-primary text-primary-foreground' : item.failed ? 'rounded-bl-md border border-danger/20 bg-danger/10 text-danger' : 'rounded-bl-md border border-border bg-surface-raised'}`}
-            >
-              {item.role === 'CONCIERGE' && item.content === t('updated') && (
-                <CheckCircle2 className="mb-2 size-5 text-success" />
-              )}
-              {item.content}
-            </div>
-          </article>
-        ))}
-        {send.isPending && !hasStreamingText && (
-          <div className="flex justify-start">
-            <div
-              className="rounded-2xl rounded-bl-md border border-border bg-surface-raised px-4 py-3 text-sm text-muted-foreground"
-              role="status"
-            >
-              <span className="mr-2 inline-block size-2 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />
-              {t('processing')}
-            </div>
-          </div>
-        )}
+        {send.isPending && !hasStreamingText && <TypingIndicator label={t('processing')} />}
+        {upload.isPending && <TypingIndicator label={t('uploading')} />}
         {shareAccess && (
-          <article className="flex justify-start">
-            <div className="w-full max-w-xl rounded-2xl rounded-bl-md border border-border bg-surface-raised p-4 sm:p-5">
+          <AssistantMessage wide>
+            <div className="w-full max-w-xl">
               <div className="flex items-center gap-2 font-semibold">
                 <QrCode className="size-5 text-primary" />
                 {t('guestAccessReady')}
@@ -337,29 +343,40 @@ export function ConciergeWorkspace({
                 </Button>
               </div>
             </div>
-          </article>
+          </AssistantMessage>
         )}
       </div>
-      <div className="border-t border-border p-3 sm:p-4">
-        <div className="rounded-xl border border-input bg-surface-raised p-2 focus-within:border-focus">
+      <form
+        className="border-t border-border bg-surface p-3 sm:p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <div
+          className={`rounded-2xl border bg-background p-2 shadow-sm transition ${send.isPending ? 'border-border opacity-65' : 'border-input focus-within:border-focus focus-within:ring-2 focus-within:ring-focus/15'}`}
+        >
           <label htmlFor="concierge-message" className="sr-only">
             {t('placeholder')}
           </label>
           <Textarea
+            ref={messageRef}
             id="concierge-message"
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();
                 submit();
               }
             }}
-            className="min-h-20 resize-none border-0 bg-transparent focus:outline-none"
+            className="max-h-28 !min-h-11 !resize-none border-0 bg-transparent px-2 py-2 focus:border-transparent"
+            rows={1}
             placeholder={t('placeholder')}
             maxLength={4_000}
+            disabled={send.isPending}
           />
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 border-t border-border/70 px-1 pt-2">
             {!guest && allowUpload ? (
               <>
                 <input
@@ -372,33 +389,39 @@ export function ConciergeWorkspace({
                     if (file) upload.mutate(file);
                     event.target.value = '';
                   }}
+                  disabled={upload.isPending || send.isPending}
                 />
-                <Button
+                <button
                   type="button"
-                  variant="quiet"
-                  size="sm"
-                  loading={upload.isPending}
+                  className="grid size-10 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
                   onClick={() => fileRef.current?.click()}
+                  disabled={upload.isPending || send.isPending}
+                  aria-label={t('attach')}
+                  title={t('attach')}
                 >
-                  <Paperclip className="size-4" />
-                  {t('attach')}
-                </Button>
+                  <Paperclip className="size-5" />
+                </button>
               </>
             ) : (
-              <span />
+              <span className="size-10" aria-hidden />
             )}
+            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+              {t('sendHint')}
+            </span>
             <Button
-              type="button"
+              type="submit"
               size="sm"
-              onClick={submit}
+              className="size-10 min-h-10 shrink-0 rounded-full px-0"
               disabled={!message.trim() || send.isPending}
+              aria-label={t('send')}
+              title={t('send')}
             >
               <ArrowUp className="size-4" />
-              {t('send')}
+              <span className="sr-only">{t('send')}</span>
             </Button>
           </div>
         </div>
-      </div>
+      </form>
     </section>
   );
 }

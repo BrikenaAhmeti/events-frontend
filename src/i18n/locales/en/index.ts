@@ -153,7 +153,7 @@ export const en = {
       'Choose the client when required, then share everything you already know. You can write naturally, attach a file, or use both.',
     setupConversation: 'Event setup conversation',
     chooseClientPrompt:
-      'First, choose the client this event belongs to. Save your choice so I can prepare the right workspace.',
+      'Choose the client this event belongs to, then save your selection to continue.',
     saveClientSelection: 'Save and continue',
     preparingNextStep: 'Preparing the next step',
     reviewingEventInformation: 'Reviewing event information',
@@ -297,9 +297,13 @@ export const en = {
       'Share event details naturally, upload supporting information, or ask what still needs attention.',
     guestIntro:
       'Ask about your schedule, meeting points, travel details or anything available for this event.',
+    conversation: 'Concierge conversation',
+    loadingConversation: 'Loading the conversation',
     placeholder: 'Write a message…',
     send: 'Send message',
-    processing: 'Concierge is reviewing the event information…',
+    sendHint: 'Press Enter to send · Shift + Enter for a new line',
+    processing: 'Preparing a response',
+    uploading: 'Preparing the uploaded document',
     suggested: 'Suggested questions',
     updated: 'Event details updated',
     failed: 'Concierge could not respond. Please try again.',

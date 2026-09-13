@@ -10,6 +10,10 @@ const streamEndpoint = 'http://localhost:3000/api/v1/guest/events/event-a/concie
 
 describe('ConciergeWorkspace', () => {
   it('loads history and renders a streamed guest answer', async () => {
+    let releaseResponse: (() => void) | undefined;
+    const holdResponse = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
     server.use(
       http.get(historyEndpoint, () =>
         HttpResponse.json({
@@ -20,6 +24,7 @@ describe('ConciergeWorkspace', () => {
       http.post(streamEndpoint, async ({ request }) => {
         const body = (await request.json()) as { message: string };
         expect(body.message).toBe('Where is registration?');
+        await holdResponse;
         return new HttpResponse(
           [
             JSON.stringify({ type: 'status', messageId: 'message-b', status: 'PROCESSING' }),
@@ -48,6 +53,12 @@ describe('ConciergeWorkspace', () => {
     const user = userEvent.setup();
     await user.type(screen.getByLabelText('Write a message…'), 'Where is registration?');
     await user.click(screen.getByRole('button', { name: 'Send message' }));
+
+    expect(
+      screen.getByText('Where is registration?').closest('[data-message-role="user"]'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Preparing a response' })).toBeInTheDocument();
+    releaseResponse?.();
 
     expect(
       await screen.findByText('Registration is in the Riverside Hall foyer.'),

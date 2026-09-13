@@ -1,12 +1,16 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, FileText, MessageCircle, Paperclip, Send, X } from 'lucide-react';
+import { Check, FileText, Paperclip, Send, X } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/atoms/Button';
 import { Input, Select, Textarea } from '../../components/atoms/Input';
 import { FormField } from '../../components/molecules/FormField';
-import { PageHeader } from '../../components/molecules/PageHeader';
+import {
+  AssistantMessage as ChatBubble,
+  TypingIndicator as TypingBubble,
+  UserMessage as UserChatBubble,
+} from '../../components/molecules/ChatMessage';
 import { activeClientId, can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
 import { CompletenessPanel } from '../../features/events/CompletenessPanel';
@@ -274,18 +278,18 @@ export function CreateEventPage() {
   if (user && !isSuperAdmin && defaultClient && !mayCreate)
     return <Navigate to="/app/forbidden" replace />;
   return (
-    <div className="mx-auto max-w-4xl">
-      <PageHeader
-        eyebrow={t('setup')}
-        title={t('createTitle')}
-        description={t('createChatIntro')}
-      />
-      <section className="flex h-[calc(100dvh-13rem)] min-h-[38rem] max-h-[56rem] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-        <header className="border-b border-border bg-surface-sunken/45 p-5 sm:p-6">
+    <div className="mx-auto max-w-6xl">
+      <section
+        className="flex h-[calc(100dvh-7.5rem)] min-h-[36rem] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm md:h-[calc(100dvh-4rem)]"
+        aria-labelledby="event-setup-title"
+      >
+        <header className="border-b border-border bg-surface-sunken/45 px-4 py-3.5 sm:px-6">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
             {t('guidedSetup')}
           </p>
-          <h2 className="mt-2 font-display text-3xl">{t('tellConcierge')}</h2>
+          <h1 id="event-setup-title" className="mt-1 font-display text-2xl">
+            {t('createTitle')}
+          </h1>
         </header>
         <div
           ref={chatLogRef}
@@ -294,7 +298,7 @@ export function CreateEventPage() {
           aria-live="polite"
           aria-label={t('setupConversation')}
         >
-          <ChatBubble>{t('setupWelcome')}</ChatBubble>
+          {!isSuperAdmin && <ChatBubble>{t('setupWelcome')}</ChatBubble>}
           {isSuperAdmin && (
             <ChatBubble>
               <p className="mb-4 text-sm text-muted-foreground">{t('chooseClientPrompt')}</p>
@@ -456,8 +460,8 @@ export function CreateEventPage() {
             </label>
             <Textarea
               id="event-source"
-              className="max-h-28 !min-h-14 !resize-none border-0 bg-transparent px-2 py-2 focus:border-transparent"
-              rows={2}
+              className="max-h-28 !min-h-11 !resize-none border-0 bg-transparent px-2 py-2 focus:border-transparent"
+              rows={1}
               value={source}
               onChange={(event) => setSource(event.target.value)}
               onKeyDown={handleComposerKeyDown}
@@ -505,11 +509,7 @@ export function CreateEventPage() {
                 <Paperclip className="size-5" />
               </button>
               <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                {!setupReady
-                  ? t('clientSelectionRequired')
-                  : reviewed
-                    ? t('continueAbove')
-                    : t('sendHint')}
+                {setupReady ? (reviewed ? t('continueAbove') : t('sendHint')) : ''}
               </span>
               <Button
                 type="submit"
@@ -526,56 +526,6 @@ export function CreateEventPage() {
           </div>
         </form>
       </section>
-    </div>
-  );
-}
-
-function ChatBubble({
-  children,
-  danger = false,
-  wide = false,
-}: {
-  children: React.ReactNode;
-  danger?: boolean;
-  wide?: boolean;
-}) {
-  return (
-    <div className={`flex items-end gap-2 ${wide ? 'w-full' : ''}`} data-message-role="assistant">
-      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
-        <MessageCircle className="size-4" aria-hidden />
-      </span>
-      <div
-        className={`${wide ? 'w-[calc(100%-2.5rem)]' : 'max-w-[calc(94%-2.5rem)] sm:max-w-[82%]'} rounded-2xl rounded-bl-md border p-4 shadow-sm ${danger ? 'border-danger/30 bg-danger/10 text-danger' : 'border-border bg-surface-raised'}`}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function UserChatBubble({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      className="ml-auto max-w-[88%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground shadow-sm sm:max-w-[74%]"
-      data-message-role="user"
-    >
-      {children}
-    </div>
-  );
-}
-
-function TypingBubble({ label }: { label: string }) {
-  return (
-    <div className="flex items-end gap-2" role="status" aria-label={label}>
-      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
-        <MessageCircle className="size-4" aria-hidden />
-      </span>
-      <div className="flex h-11 items-center gap-1 rounded-2xl rounded-bl-md border border-border bg-surface-raised px-4 shadow-sm">
-        <span className="sr-only">{label}</span>
-        <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-300ms] motion-reduce:animate-none" />
-        <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-150ms] motion-reduce:animate-none" />
-        <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground motion-reduce:animate-none" />
-      </div>
     </div>
   );
 }
