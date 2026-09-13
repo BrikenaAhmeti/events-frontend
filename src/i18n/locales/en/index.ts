@@ -151,11 +151,12 @@ export const en = {
     tellConcierge: 'Tell us about the event',
     setupWelcome:
       'Choose the client when required, then share everything you already know. You can write naturally, attach a file, or use both.',
+    eventChatTitle: 'Event setup chat',
     setupConversation: 'Event setup conversation',
     chooseClientPrompt:
       'Choose the client this event belongs to, then save your selection to continue.',
     saveClientSelection: 'Save and continue',
-    startNewSetupChat: 'New setup chat',
+    startNewSetupChat: 'New chat',
     preparingNextStep: 'Preparing the next step',
     reviewingEventInformation: 'Reviewing event information',
     eventBrief: 'Event information',

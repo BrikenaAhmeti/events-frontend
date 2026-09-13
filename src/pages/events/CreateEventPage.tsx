@@ -382,15 +382,10 @@ export function CreateEventPage() {
         className="flex h-[calc(100dvh-7.5rem)] min-h-[36rem] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm md:h-[calc(100dvh-4rem)]"
         aria-labelledby="event-setup-title"
       >
-        <header className="flex items-center justify-between gap-4 border-b border-border bg-surface-sunken/45 px-4 py-3.5 sm:px-6">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-              {t('guidedSetup')}
-            </p>
-            <h1 id="event-setup-title" className="mt-1 font-display text-2xl">
-              {t('createTitle')}
-            </h1>
-          </div>
+        <header className="flex min-h-[3.25rem] items-center justify-between gap-3 border-b border-border bg-surface-sunken/45 px-4 py-2 sm:px-5">
+          <h1 id="event-setup-title" className="text-sm font-semibold text-foreground">
+            {t('eventChatTitle')}
+          </h1>
           {setupReady && (
             <Button
               size="sm"

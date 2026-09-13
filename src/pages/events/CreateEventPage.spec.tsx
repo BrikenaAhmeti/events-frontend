@@ -323,7 +323,7 @@ describe('CreateEventPage platform administrator flow', () => {
     expect(await screen.findByText('This is an unfinished conference.')).toBeInTheDocument();
     expect(await screen.findByLabelText(/Event name/)).toHaveValue('Unfinished Conference');
 
-    await userEvent.click(screen.getByRole('button', { name: 'New setup chat' }));
+    await userEvent.click(screen.getByRole('button', { name: 'New chat' }));
 
     expect(await screen.findByText('Starting a fresh event setup.')).toBeInTheDocument();
     expect(screen.queryByText('This is an unfinished conference.')).not.toBeInTheDocument();
