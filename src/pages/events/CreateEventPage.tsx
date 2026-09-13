@@ -4,13 +4,14 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/atoms/Button';
-import { Input, Select, Textarea } from '../../components/atoms/Input';
+import { Input, Textarea } from '../../components/atoms/Input';
 import { FormField } from '../../components/molecules/FormField';
 import {
   AssistantMessage as ChatBubble,
   TypingIndicator as TypingBubble,
   UserMessage as UserChatBubble,
 } from '../../components/molecules/ChatMessage';
+import { CustomSelect } from '../../components/molecules/CustomSelect';
 import { activeClientId, can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
 import { CompletenessPanel } from '../../features/events/CompletenessPanel';
@@ -303,19 +304,20 @@ export function CreateEventPage() {
             <ChatBubble>
               <p className="mb-4 text-sm text-muted-foreground">{t('chooseClientPrompt')}</p>
               <FormField label={t('client')} htmlFor="setup-client">
-                <Select
+                <CustomSelect
                   id="setup-client"
+                  label={t('client')}
                   value={selectedClientId}
-                  onChange={(event) => selectClient(event.target.value)}
+                  options={[
+                    { value: '', label: t('selectClient') },
+                    ...(clients.data ?? []).map((client) => ({
+                      value: client.id,
+                      label: client.name,
+                    })),
+                  ]}
+                  onChange={selectClient}
                   disabled={start.isPending || analyze.isPending || create.isPending}
-                >
-                  <option value="">{t('selectClient')}</option>
-                  {clients.data?.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                    </option>
-                  ))}
-                </Select>
+                />
               </FormField>
               <Button
                 className="mt-3"
@@ -553,17 +555,16 @@ function EventDetailsForm({
   return (
     <div className="mt-5 grid gap-4 sm:grid-cols-2">
       <FormField label={t('category')} htmlFor="setup-category">
-        <Select
+        <CustomSelect
           id="setup-category"
+          label={t('category')}
           value={draft.category}
-          onChange={(event) => update('category', event.target.value)}
-        >
-          {categories.map((category) => (
-            <option key={category} value={category}>
-              {t(`categories.${category}`)}
-            </option>
-          ))}
-        </Select>
+          options={categories.map((category) => ({
+            value: category,
+            label: t(`categories.${category}`),
+          }))}
+          onChange={(value) => update('category', value)}
+        />
       </FormField>
       {fields.map((field) => (
         <FormField

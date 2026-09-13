@@ -18,7 +18,7 @@ import { Button } from '../../components/atoms/Button';
 import { Input } from '../../components/atoms/Input';
 import { Skeleton } from '../../components/atoms/Skeleton';
 import { ConfirmDialog } from '../../components/molecules/ConfirmDialog';
-import { CustomSelect } from '../../components/molecules/CustomSelect';
+import { CustomMultiSelect, CustomSelect } from '../../components/molecules/CustomSelect';
 import { DateFilter } from '../../components/molecules/DateFilter';
 import { EmptyState } from '../../components/molecules/EmptyState';
 import { PageHeader } from '../../components/molecules/PageHeader';
@@ -39,8 +39,8 @@ export function EventsPage() {
     params.get('clientId') ?? (user ? activeClientId(user) : undefined) ?? '',
   );
   const [search, setSearch] = useState('');
-  const [lifecycle, setLifecycle] = useState('');
-  const [status, setStatus] = useState('');
+  const [lifecycles, setLifecycles] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
   const [date, setDate] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -75,8 +75,8 @@ export function EventsPage() {
         Object.entries({
           clientId,
           search,
-          lifecycle,
-          status,
+          lifecycle: lifecycles.join(','),
+          status: statuses.join(','),
           date,
           from,
           to,
@@ -84,7 +84,7 @@ export function EventsPage() {
           cursor: cursors.at(-1),
         }).filter(([, value]) => value),
       ) as Record<string, string>,
-    [clientId, search, lifecycle, status, date, from, to, createdByUserId, cursors],
+    [clientId, search, lifecycles, statuses, date, from, to, createdByUserId, cursors],
   );
   const events = useQuery({
     queryKey: eventKeys.list(filters),
@@ -109,8 +109,8 @@ export function EventsPage() {
   const resetPage = () => setCursors([undefined]);
   const clearFilters = () => {
     setSearch('');
-    setLifecycle('');
-    setStatus('');
+    setLifecycles([]);
+    setStatuses([]);
     setDate('');
     setFrom('');
     setTo('');
@@ -167,35 +167,37 @@ export function EventsPage() {
               }}
             />
           )}
-          <CustomSelect
+          <CustomMultiSelect
             label={t('lifecycle')}
             icon={ListFilter}
-            value={lifecycle}
-            options={[
-              { value: '', label: t('allEvents') },
-              ...['UPCOMING', 'ONGOING', 'PAST', 'CANCELLED', 'UNSCHEDULED'].map((status) => ({
-                value: status,
-                label: t(`statuses.${status}`, { ns: 'common' }),
-              })),
-            ]}
+            value={lifecycles}
+            placeholder={t('allEvents')}
+            options={['UPCOMING', 'ONGOING', 'PAST', 'CANCELLED', 'UNSCHEDULED'].map((status) => ({
+              value: status,
+              label: t(`statuses.${status}`, { ns: 'common' }),
+            }))}
+            selectedLabel={(count) => t('selectedFilterCount', { count })}
+            clearLabel={t('clearSelection')}
+            doneLabel={t('done')}
             onChange={(value) => {
-              setLifecycle(value);
+              setLifecycles(value);
               resetPage();
             }}
           />
-          <CustomSelect
+          <CustomMultiSelect
             label={t('workflowStatus')}
             icon={ListFilter}
-            value={status}
-            options={[
-              { value: '', label: t('allStatuses') },
-              ...['DRAFT', 'READY', 'PUBLISHED', 'CANCELLED', 'ARCHIVED'].map((value) => ({
-                value,
-                label: t(`statuses.${value}`, { ns: 'common' }),
-              })),
-            ]}
+            value={statuses}
+            placeholder={t('allStatuses')}
+            options={['DRAFT', 'READY', 'PUBLISHED', 'CANCELLED', 'ARCHIVED'].map((value) => ({
+              value,
+              label: t(`statuses.${value}`, { ns: 'common' }),
+            }))}
+            selectedLabel={(count) => t('selectedFilterCount', { count })}
+            clearLabel={t('clearSelection')}
+            doneLabel={t('done')}
             onChange={(value) => {
-              setStatus(value);
+              setStatuses(value);
               resetPage();
             }}
           />

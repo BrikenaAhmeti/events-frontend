@@ -32,10 +32,10 @@
   --focus: #16292b;
   --sidebar: #16292b;
   --sidebar-foreground: #f5f2ec;
-  --action-primary: #f5f2ec;
-  --action-primary-foreground: #000000;
-  --action-secondary: #000000;
-  --action-secondary-foreground: #f5f2ec;
+  --action-primary: #16292b;
+  --action-primary-foreground: #f5f2ec;
+  --action-secondary: #f5f2ec;
+  --action-secondary-foreground: #16292b;
 }
 
 .dark {
@@ -128,8 +128,8 @@ button:disabled {
 }
 .filter-control:focus,
 .filter-control:focus-visible {
-  border-color: var(--input);
-  box-shadow: none;
+  border-color: color-mix(in srgb, var(--focus) 55%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 14%, transparent);
   outline: none;
 }
 ::selection {

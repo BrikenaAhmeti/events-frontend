@@ -340,8 +340,10 @@ test('platform administrator confirms a client before the chat composer unlocks'
   await page.goto('/app/events/new');
   const composer = page.getByLabel('Event information');
   await expect(composer).toBeDisabled();
-  await page.getByLabel('Client').selectOption('client-a');
+  await page.getByRole('button', { name: 'Client' }).click();
+  await page.getByRole('option', { name: 'Northstar Events' }).click();
   await expect(composer).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Save and continue' })).toBeEnabled();
   await page.getByRole('button', { name: 'Save and continue' }).click();
   await expect(page.getByRole('status', { name: 'Preparing the next step' })).toBeVisible();
   releaseStart?.();

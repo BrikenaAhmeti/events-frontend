@@ -164,7 +164,7 @@ describe('EventsPage event creation', () => {
 });
 
 describe('EventsPage filters', () => {
-  it('filters events by workflow status', async () => {
+  it('filters events by multiple workflow statuses', async () => {
     let requestedStatus: string | null = null;
     server.use(
       http.get(`${api}/auth/me`, () =>
@@ -204,5 +204,8 @@ describe('EventsPage filters', () => {
     await userEvent.click(screen.getByRole('option', { name: 'Published' }));
 
     await waitFor(() => expect(requestedStatus).toBe('PUBLISHED'));
+
+    await userEvent.click(screen.getByRole('option', { name: 'Ready' }));
+    await waitFor(() => expect(requestedStatus).toBe('PUBLISHED,READY'));
   });
 });

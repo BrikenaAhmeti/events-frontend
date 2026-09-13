@@ -68,7 +68,8 @@ describe('CreateEventPage platform administrator flow', () => {
       </MemoryRouter>,
     );
 
-    await userEvent.selectOptions(await screen.findByLabelText('Client'), 'client-a');
+    await userEvent.click(await screen.findByRole('button', { name: 'Client' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Northstar Events' }));
     const composer = screen.getByLabelText('Event information');
     expect(composer).toBeDisabled();
     await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
@@ -142,8 +143,9 @@ describe('CreateEventPage platform administrator flow', () => {
       </MemoryRouter>,
     );
 
-    const clientSelect = await screen.findByLabelText('Client');
-    await userEvent.selectOptions(clientSelect, 'client-a');
+    const clientSelect = await screen.findByRole('button', { name: 'Client' });
+    await userEvent.click(clientSelect);
+    await userEvent.click(screen.getByRole('option', { name: 'Northstar Events' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
     await waitFor(() => expect(screen.getByLabelText('Event information')).toBeEnabled());
     await userEvent.type(
@@ -155,7 +157,8 @@ describe('CreateEventPage platform administrator flow', () => {
       await screen.findByRole('button', { name: 'Create event workspace' }),
     ).toBeInTheDocument();
 
-    await userEvent.selectOptions(clientSelect, 'client-b');
+    await userEvent.click(clientSelect);
+    await userEvent.click(screen.getByRole('option', { name: 'Coastal Events' }));
 
     expect(
       screen.queryByRole('button', { name: 'Create event workspace' }),
