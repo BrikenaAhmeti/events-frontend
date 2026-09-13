@@ -75,6 +75,19 @@ type SetupStart = {
   message: string;
 };
 
+type SetupConversationMessage = {
+  id: number;
+  role: 'user' | 'assistant';
+  text?: string;
+  fileName?: string;
+};
+
+type SetupSubmission = {
+  text: string;
+  file: File | null;
+  context: string;
+};
+
 const emptyDraft: Draft = {
   name: '',
   category: 'OTHER',
@@ -137,7 +150,10 @@ export function CreateEventPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const chatLogRef = useRef<HTMLDivElement>(null);
+  const conversationEndRef = useRef<HTMLDivElement>(null);
+  const messageSequence = useRef(0);
   const defaultClient = params.get('clientId') ?? (user ? activeClientId(user) : '') ?? '';
   const [selectedClientId, setSelectedClientId] = useState(defaultClient);
   const [confirmedClientId, setConfirmedClientId] = useState('');
@@ -147,9 +163,8 @@ export function CreateEventPage() {
   const [reviewed, setReviewed] = useState(false);
   const [setupMessage, setSetupMessage] = useState('');
   const [selectedClientMessage, setSelectedClientMessage] = useState('');
-  const [submittedSource, setSubmittedSource] = useState('');
-  const [submittedFileName, setSubmittedFileName] = useState('');
-  const [analysisMessage, setAnalysisMessage] = useState('');
+  const [conversation, setConversation] = useState<SetupConversationMessage[]>([]);
+  const [eventFiles, setEventFiles] = useState<File[]>([]);
   const [suggestedName, setSuggestedName] = useState('');
   const [nameDecision, setNameDecision] = useState<'accepted' | 'pending' | 'rejected'>('pending');
   const [analyzedContent, setAnalyzedContent] = useState<
@@ -175,30 +190,43 @@ export function CreateEventPage() {
     onSuccess: (result) => {
       setConfirmedClientId(result.clientId);
       setSetupMessage(result.message);
+      requestAnimationFrame(() => composerRef.current?.focus());
     },
   });
   const analyze = useMutation({
-    mutationFn: () =>
+    mutationFn: ({ text, file: submittedFile, context }: SetupSubmission) =>
       apiClient.form<SetupAnalysis>(
         '/events/setup/analyze',
-        { clientId, ...(source.trim() ? { text: source.trim() } : {}) },
-        file ?? undefined,
+        {
+          clientId,
+          ...(text ? { text } : {}),
+          ...(context ? { context } : {}),
+        },
+        submittedFile ?? undefined,
       ),
-    onMutate: () => {
-      setSubmittedSource(source.trim());
-      setSubmittedFileName(file?.name ?? '');
-      setAnalysisMessage('');
+    onMutate: ({ text, file: submittedFile }) => {
+      setConversation((current) => [
+        ...current,
+        {
+          id: ++messageSequence.current,
+          role: 'user',
+          ...(text ? { text } : {}),
+          ...(submittedFile ? { fileName: submittedFile.name } : {}),
+        },
+      ]);
+      if (submittedFile) setEventFiles((current) => [...current, submittedFile]);
+      setSource('');
+      setFile(null);
     },
     onSuccess: (result) => {
-      setDraft({
-        ...emptyDraft,
+      setDraft((current) => ({
+        ...current,
         ...result.event,
-        name: result.event.name ?? '',
-        startAt: asLocalDateTime(result.event.startAt),
-        endAt: asLocalDateTime(result.event.endAt),
-      });
+        name: result.event.name ?? current.name,
+        startAt: result.event.startAt ? asLocalDateTime(result.event.startAt) : current.startAt,
+        endAt: result.event.endAt ? asLocalDateTime(result.event.endAt) : current.endAt,
+      }));
       setSuggestedName(result.suggestedName);
-      setAnalysisMessage(result.message ?? t('reviewCompleteMessage'));
       setNameDecision(result.nameWasProvided ? 'accepted' : 'pending');
       setAnalyzedContent({
         facts: result.facts ?? [],
@@ -207,7 +235,16 @@ export function CreateEventPage() {
         extractedScheduleItems: result.extractedScheduleItems,
       });
       setReviewed(true);
+      setConversation((current) => [
+        ...current,
+        {
+          id: ++messageSequence.current,
+          role: 'assistant',
+          text: result.message?.trim() || t('reviewCompleteMessage'),
+        },
+      ]);
     },
+    onSettled: () => requestAnimationFrame(() => composerRef.current?.focus()),
   });
   const create = useMutation({
     mutationFn: async () => {
@@ -221,7 +258,8 @@ export function CreateEventPage() {
         facts: analyzedContent.facts,
         schedule: analyzedContent.schedule,
       });
-      if (file) await apiClient.upload(`/events/${event.id}/documents`, file);
+      for (const eventFile of eventFiles)
+        await apiClient.upload(`/events/${event.id}/documents`, eventFile);
       return event;
     },
     onSuccess: (event) => void navigate(`/app/events/${event.id}/concierge`),
@@ -233,9 +271,10 @@ export function CreateEventPage() {
     setConfirmedClientId('');
     setSetupMessage('');
     setSelectedClientMessage('');
-    setSubmittedSource('');
-    setSubmittedFileName('');
-    setAnalysisMessage('');
+    setConversation([]);
+    setEventFiles([]);
+    setSource('');
+    setFile(null);
     start.reset();
     analyze.reset();
     setDraft(emptyDraft);
@@ -255,8 +294,15 @@ export function CreateEventPage() {
     start.mutate(selectedClientId);
   };
   const submitBrief = () => {
-    if (!setupReady || analyze.isPending || reviewed || (!source.trim() && !file)) return;
-    analyze.mutate();
+    const text = source.trim();
+    if (!setupReady || analyze.isPending || (!text && !file)) return;
+    analyze.mutate({
+      text,
+      file,
+      context: reviewed
+        ? JSON.stringify({ event: draft, facts: analyzedContent.facts, schedule: analyzedContent.schedule })
+        : '',
+    });
   };
   const handleBriefSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -271,11 +317,15 @@ export function CreateEventPage() {
     Boolean(clientId && draft.name.trim().length >= 2 && draft.category) &&
     nameDecision === 'accepted';
   const draftCompleteness = evaluateDraft(draft);
-  const composerDisabled = !setupReady || start.isPending || analyze.isPending || reviewed;
+  const composerDisabled = !setupReady || start.isPending || analyze.isPending || create.isPending;
   useEffect(() => {
-    const chatLog = chatLogRef.current;
-    if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
-  }, [analysisMessage, analyze.isPending, nameDecision, reviewed, setupMessage, start.isPending]);
+    const frame = requestAnimationFrame(() => {
+      const conversationEnd = conversationEndRef.current;
+      if (conversationEnd && typeof conversationEnd.scrollIntoView === 'function')
+        conversationEnd.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [analyze.isPending, conversation, nameDecision, reviewed, setupMessage, start.isPending]);
   if (user && !isSuperAdmin && defaultClient && !mayCreate)
     return <Navigate to="/app/forbidden" replace />;
   return (
@@ -342,16 +392,20 @@ export function CreateEventPage() {
           {start.isPending && <TypingBubble label={t('preparingNextStep')} />}
           {setupMessage && <ChatBubble>{setupMessage}</ChatBubble>}
           {start.error && <ChatBubble danger>{start.error.message}</ChatBubble>}
-          {(submittedSource || submittedFileName) && (
-            <UserChatBubble>
-              {submittedSource && <p className="whitespace-pre-wrap">{submittedSource}</p>}
-              {submittedFileName && (
-                <span className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary-foreground/10 px-3 py-2 text-xs">
-                  <FileText className="size-4" />
-                  {submittedFileName}
-                </span>
-              )}
-            </UserChatBubble>
+          {conversation.map((message) =>
+            message.role === 'assistant' ? (
+              <ChatBubble key={message.id}>{message.text}</ChatBubble>
+            ) : (
+              <UserChatBubble key={message.id}>
+                {message.text && <p className="whitespace-pre-wrap">{message.text}</p>}
+                {message.fileName && (
+                  <span className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary-foreground/10 px-3 py-2 text-xs">
+                    <FileText className="size-4" />
+                    {message.fileName}
+                  </span>
+                )}
+              </UserChatBubble>
+            ),
           )}
           {analyze.isPending && <TypingBubble label={t('reviewingEventInformation')} />}
           {analyze.error && (
@@ -370,9 +424,9 @@ export function CreateEventPage() {
               </Button>
             </ChatBubble>
           )}
+          <div ref={conversationEndRef} className="h-px" aria-hidden />
           {reviewed && (
             <>
-              {analysisMessage && <ChatBubble>{analysisMessage}</ChatBubble>}
               {nameDecision === 'pending' && (
                 <ChatBubble>
                   <p className="font-semibold">{t('nameSuggestion')}</p>
@@ -455,14 +509,15 @@ export function CreateEventPage() {
         </div>
         <form className="border-t border-border bg-surface p-3 sm:p-4" onSubmit={handleBriefSubmit}>
           <div
-            className={`rounded-2xl border bg-background p-2 shadow-sm transition ${composerDisabled ? 'border-border opacity-65' : 'border-input focus-within:border-focus focus-within:ring-2 focus-within:ring-focus/15'}`}
+            className={`rounded-2xl border p-2 shadow-sm transition ${composerDisabled ? 'border-border bg-background opacity-65' : 'border-primary/35 bg-surface-raised focus-within:border-focus focus-within:ring-2 focus-within:ring-focus/15'}`}
           >
             <label className="sr-only" htmlFor="event-source">
               {t('eventBrief')}
             </label>
             <Textarea
+              ref={composerRef}
               id="event-source"
-              className="max-h-28 !min-h-11 !resize-none border-0 bg-transparent px-2 py-2 focus:border-transparent"
+              className="chat-composer-input max-h-28 !min-h-11 !resize-none border-0 bg-transparent px-2 py-2"
               rows={1}
               value={source}
               onChange={(event) => setSource(event.target.value)}
@@ -471,7 +526,7 @@ export function CreateEventPage() {
                 !setupReady
                   ? t('saveClientBeforeWriting')
                   : reviewed
-                    ? t('eventInformationReceived')
+                    ? t('addMoreEventInformation')
                     : t('eventBriefPlaceholder')
               }
               maxLength={80_000}
@@ -511,7 +566,7 @@ export function CreateEventPage() {
                 <Paperclip className="size-5" />
               </button>
               <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                {setupReady ? (reviewed ? t('continueAbove') : t('sendHint')) : ''}
+                {setupReady ? (reviewed ? t('sendMoreHint') : t('sendHint')) : ''}
               </span>
               <Button
                 type="submit"

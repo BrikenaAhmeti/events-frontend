@@ -12,7 +12,13 @@ export function AssistantMessage({
   wide?: boolean;
 }) {
   return (
-    <div className={clsx('flex items-end gap-2', wide && 'w-full')} data-message-role="assistant">
+    <div
+      className={clsx(
+        'flex animate-[chat-message-in_220ms_ease-out_both] items-end gap-2',
+        wide && 'w-full',
+      )}
+      data-message-role="assistant"
+    >
       <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">
         <MessageCircle className="size-4" aria-hidden />
       </span>
@@ -34,7 +40,7 @@ export function AssistantMessage({
 export function UserMessage({ children }: { children: ReactNode }) {
   return (
     <div
-      className="ml-auto max-w-[88%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground shadow-sm sm:max-w-[74%]"
+      className="ml-auto max-w-[88%] animate-[chat-message-in_180ms_ease-out_both] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground shadow-sm sm:max-w-[74%]"
       data-message-role="user"
     >
       {children}

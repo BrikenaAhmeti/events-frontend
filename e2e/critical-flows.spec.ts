@@ -494,6 +494,8 @@ test('client administrator completes the critical event operations flow', async 
     if (url.pathname.endsWith('/events/setup/analyze') && method === 'POST')
       return route.fulfill({
         json: {
+          message:
+            'I captured the retreat details. You can add another detail or correction below at any time.',
           event: {
             name: 'Coastal Leadership Retreat',
             category: 'CORPORATE_RETREAT',
@@ -584,7 +586,16 @@ test('client administrator completes the critical event operations flow', async 
     .getByLabel('Event information')
     .fill('Coastal Leadership Retreat in Cascais for the leadership team.');
   await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(
+    page.getByText('Coastal Leadership Retreat in Cascais for the leadership team.'),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      'I captured the retreat details. You can add another detail or correction below at any time.',
+    ),
+  ).toBeInViewport();
   await expect(page.getByText('Event information reviewed')).toBeVisible();
+  await expect(page.getByLabel('Event information')).toBeEnabled();
   await page.getByRole('button', { name: 'Create event workspace' }).click();
   await expect(page.getByRole('heading', { name: 'Coastal Leadership Retreat' })).toBeVisible();
 

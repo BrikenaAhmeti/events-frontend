@@ -11,6 +11,11 @@ const api = 'http://localhost:3000/api/v1';
 describe('CreateEventPage platform administrator flow', () => {
   it('creates an event on behalf of the selected client', async () => {
     let createdEvent: Record<string, unknown> | undefined;
+    const setupRequests: FormData[] = [];
+    let releaseFirstResponse: (() => void) | undefined;
+    const firstResponse = new Promise<void>((resolve) => {
+      releaseFirstResponse = resolve;
+    });
     server.use(
       http.get(`${api}/auth/me`, () =>
         HttpResponse.json({
@@ -34,8 +39,11 @@ describe('CreateEventPage platform administrator flow', () => {
           message: 'Tell me everything you know about the event.',
         }),
       ),
-      http.post(`${api}/events/setup/analyze`, () =>
-        HttpResponse.json({
+      http.post(`${api}/events/setup/analyze`, async ({ request }) => {
+        setupRequests.push(await request.formData());
+        if (setupRequests.length === 1) await firstResponse;
+        return HttpResponse.json({
+          message: 'I captured the location. What dates and organizer contact should I add?',
           event: { name: 'Leadership Forum', category: 'CONFERENCE' },
           suggestedName: 'Leadership Forum',
           nameWasProvided: true,
@@ -51,8 +59,8 @@ describe('CreateEventPage platform administrator flow', () => {
           extractedFacts: 0,
           extractedScheduleItems: 0,
           file: null,
-        }),
-      ),
+        });
+      }),
       http.post(`${api}/events`, async ({ request }) => {
         createdEvent = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ id: 'event-new' });
@@ -76,6 +84,26 @@ describe('CreateEventPage platform administrator flow', () => {
     await waitFor(() => expect(composer).toBeEnabled());
     await userEvent.type(composer, 'A leadership forum in Lisbon.');
     await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(screen.getByText('A leadership forum in Lisbon.')).toBeInTheDocument();
+    expect(
+      screen.getByRole('status', { name: 'Reviewing event information' }),
+    ).toBeInTheDocument();
+    releaseFirstResponse?.();
+    expect(
+      await screen.findByText(
+        'I captured the location. What dates and organizer contact should I add?',
+      ),
+    ).toBeInTheDocument();
+    expect(composer).toBeEnabled();
+    expect(composer).toHaveValue('');
+    await userEvent.type(composer, 'The organizer is Morgan Reed.');
+    await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await waitFor(() => expect(setupRequests).toHaveLength(2));
+    expect(setupRequests[1]?.get('text')).toBe('The organizer is Morgan Reed.');
+    expect(setupRequests[1]?.get('context')).toEqual(
+      expect.stringContaining('Leadership Forum'),
+    );
+    await waitFor(() => expect(composer).toBeEnabled());
     await userEvent.click(
       await screen.findByRole('button', { name: 'Create event workspace' }),
     );
