@@ -155,6 +155,7 @@ export const en = {
     chooseClientPrompt:
       'Choose the client this event belongs to, then save your selection to continue.',
     saveClientSelection: 'Save and continue',
+    startNewSetupChat: 'New setup chat',
     preparingNextStep: 'Preparing the next step',
     reviewingEventInformation: 'Reviewing event information',
     eventBrief: 'Event information',

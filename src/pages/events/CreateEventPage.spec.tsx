@@ -34,9 +34,24 @@ describe('CreateEventPage platform administrator flow', () => {
       ),
       http.post(`${api}/events/setup/start`, () =>
         HttpResponse.json({
+          sessionId: 'setup-a',
           clientId: 'client-a',
           clientName: 'Northstar Events',
-          message: 'Tell me everything you know about the event.',
+          resumed: false,
+          messages: [
+            {
+              id: 'welcome-a',
+              role: 'CONCIERGE',
+              content: 'Describe the event or attach a file.',
+            },
+          ],
+          draft: {
+            event: {},
+            facts: [],
+            schedule: [],
+            suggestedName: '',
+            nameWasProvided: false,
+          },
         }),
       ),
       http.post(`${api}/events/setup/analyze`, async ({ request }) => {
@@ -44,12 +59,23 @@ describe('CreateEventPage platform administrator flow', () => {
         if (setupRequests.length === 1) await firstResponse;
         return HttpResponse.json({
           message: 'I captured the location. What dates and organizer contact should I add?',
-          event: { name: 'Leadership Forum', category: 'CONFERENCE' },
+          sessionId: 'setup-a',
+          event: {
+            name: 'Leadership Forum',
+            category: 'CONFERENCE',
+            description: 'An annual leadership forum for company directors.',
+            destination: 'Lisbon',
+            startAt: '2027-10-12T08:00:00.000Z',
+            endAt: '2027-10-12T18:00:00.000Z',
+            timezone: 'Europe/Lisbon',
+            organizerName: 'Morgan Reed',
+            organizerEmail: 'morgan@example.test',
+          },
           suggestedName: 'Leadership Forum',
           nameWasProvided: true,
           completeness: {
             score: 22,
-            ready: false,
+            ready: true,
             missing: [],
             warnings: [],
             recommendations: [],
@@ -100,9 +126,7 @@ describe('CreateEventPage platform administrator flow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
     await waitFor(() => expect(setupRequests).toHaveLength(2));
     expect(setupRequests[1]?.get('text')).toBe('The organizer is Morgan Reed.');
-    expect(setupRequests[1]?.get('context')).toEqual(
-      expect.stringContaining('Leadership Forum'),
-    );
+    expect(setupRequests[1]?.get('sessionId')).toBe('setup-a');
     await waitFor(() => expect(composer).toBeEnabled());
     await userEvent.click(
       await screen.findByRole('button', { name: 'Create event workspace' }),
@@ -111,6 +135,7 @@ describe('CreateEventPage platform administrator flow', () => {
     await waitFor(() =>
       expect(createdEvent).toMatchObject({
         clientId: 'client-a',
+        setupSessionId: 'setup-a',
         name: 'Leadership Forum',
         category: 'CONFERENCE',
       }),
@@ -139,19 +164,45 @@ describe('CreateEventPage platform administrator flow', () => {
       http.post(`${api}/events/setup/start`, async ({ request }) => {
         const body = (await request.json()) as { clientId: string };
         return HttpResponse.json({
+          sessionId: `setup-${body.clientId}`,
           clientId: body.clientId,
           clientName: body.clientId === 'client-a' ? 'Northstar Events' : 'Coastal Events',
-          message: 'Tell me everything you know about the event.',
+          resumed: false,
+          messages: [
+            {
+              id: `welcome-${body.clientId}`,
+              role: 'CONCIERGE',
+              content: 'Describe the event or attach a file.',
+            },
+          ],
+          draft: {
+            event: {},
+            facts: [],
+            schedule: [],
+            suggestedName: '',
+            nameWasProvided: false,
+          },
         });
       }),
       http.post(`${api}/events/setup/analyze`, () =>
         HttpResponse.json({
-          event: { name: 'Leadership Forum', category: 'CONFERENCE' },
+          sessionId: 'setup-client-a',
+          event: {
+            name: 'Leadership Forum',
+            category: 'CONFERENCE',
+            description: 'An annual leadership forum for company directors.',
+            destination: 'Lisbon',
+            startAt: '2027-10-12T08:00:00.000Z',
+            endAt: '2027-10-12T18:00:00.000Z',
+            timezone: 'Europe/Lisbon',
+            organizerName: 'Morgan Reed',
+            organizerEmail: 'morgan@example.test',
+          },
           suggestedName: 'Leadership Forum',
           nameWasProvided: true,
           completeness: {
             score: 22,
-            ready: false,
+            ready: true,
             missing: [],
             warnings: [],
             recommendations: [],
@@ -193,5 +244,90 @@ describe('CreateEventPage platform administrator flow', () => {
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText('Event information')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+  });
+
+  it('resumes an unfinished setup and can archive it by starting a new chat', async () => {
+    let starts = 0;
+    server.use(
+      http.get(`${api}/auth/me`, () =>
+        HttpResponse.json({
+          userId: 'platform-admin',
+          email: 'platform@example.test',
+          firstName: 'Platform',
+          lastName: 'Admin',
+          platformRole: 'SUPER_ADMIN',
+          memberships: [],
+        }),
+      ),
+      http.get(`${api}/events/directory/clients`, () =>
+        HttpResponse.json([
+          { id: 'client-a', name: 'Northstar Events', slug: 'northstar-events', status: 'ACTIVE' },
+        ]),
+      ),
+      http.post(`${api}/events/setup/start`, async ({ request }) => {
+        starts += 1;
+        const body = (await request.json()) as { restart?: boolean };
+        if (starts === 1) {
+          expect(body.restart).toBe(false);
+          return HttpResponse.json({
+            sessionId: 'setup-old',
+            clientId: 'client-a',
+            clientName: 'Northstar Events',
+            resumed: true,
+            messages: [
+              { id: 'welcome-old', role: 'CONCIERGE', content: 'Welcome back.' },
+              { id: 'user-old', role: 'USER', content: 'This is an unfinished conference.' },
+            ],
+            draft: {
+              event: {
+                name: 'Unfinished Conference',
+                category: 'CONFERENCE',
+                description: 'An unfinished conference setup.',
+              },
+              facts: [],
+              schedule: [],
+              suggestedName: 'Unfinished Conference',
+              nameWasProvided: true,
+            },
+          });
+        }
+        expect(body.restart).toBe(true);
+        return HttpResponse.json({
+          sessionId: 'setup-new',
+          clientId: 'client-a',
+          clientName: 'Northstar Events',
+          resumed: false,
+          messages: [
+            { id: 'welcome-new', role: 'CONCIERGE', content: 'Starting a fresh event setup.' },
+          ],
+          draft: {
+            event: {},
+            facts: [],
+            schedule: [],
+            suggestedName: '',
+            nameWasProvided: false,
+          },
+        });
+      }),
+    );
+
+    renderApp(
+      <MemoryRouter initialEntries={['/app/events/new']}>
+        <CreateEventPage />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Client' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Northstar Events' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
+    expect(await screen.findByText('This is an unfinished conference.')).toBeInTheDocument();
+    expect(await screen.findByLabelText(/Event name/)).toHaveValue('Unfinished Conference');
+
+    await userEvent.click(screen.getByRole('button', { name: 'New setup chat' }));
+
+    expect(await screen.findByText('Starting a fresh event setup.')).toBeInTheDocument();
+    expect(screen.queryByText('This is an unfinished conference.')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Event name/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Event information')).toBeEnabled();
   });
 });

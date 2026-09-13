@@ -328,9 +328,24 @@ test('platform administrator confirms a client before the chat composer unlocks'
       await holdStart;
       return route.fulfill({
         json: {
+          sessionId: 'setup-a',
           clientId: 'client-a',
           clientName: 'Northstar Events',
-          message: 'Tell me everything you know about the event.',
+          resumed: false,
+          messages: [
+            {
+              id: 'welcome-a',
+              role: 'CONCIERGE',
+              content: 'Describe the event or attach a file.',
+            },
+          ],
+          draft: {
+            event: {},
+            facts: [],
+            schedule: [],
+            suggestedName: '',
+            nameWasProvided: false,
+          },
         },
       });
     }
@@ -347,7 +362,7 @@ test('platform administrator confirms a client before the chat composer unlocks'
   await page.getByRole('button', { name: 'Save and continue' }).click();
   await expect(page.getByRole('status', { name: 'Preparing the next step' })).toBeVisible();
   releaseStart?.();
-  await expect(page.getByText('Tell me everything you know about the event.')).toBeVisible();
+  await expect(page.getByText('Describe the event or attach a file.')).toBeVisible();
   await expect(composer).toBeEnabled();
 });
 
@@ -376,9 +391,33 @@ test('event setup offers an accept or reject choice when the name is missing', a
       });
     if (url.pathname.endsWith('/auth/csrf'))
       return route.fulfill({ json: { csrfToken: 'e2e.csrf' } });
+    if (url.pathname.endsWith('/events/setup/start'))
+      return route.fulfill({
+        json: {
+          sessionId: 'setup-a',
+          clientId: 'client-a',
+          clientName: 'Northstar Events',
+          resumed: false,
+          messages: [
+            {
+              id: 'welcome-a',
+              role: 'CONCIERGE',
+              content: 'Describe the event or attach a file.',
+            },
+          ],
+          draft: {
+            event: {},
+            facts: [],
+            schedule: [],
+            suggestedName: '',
+            nameWasProvided: false,
+          },
+        },
+      });
     if (url.pathname.endsWith('/events/setup/analyze'))
       return route.fulfill({
         json: {
+          sessionId: 'setup-a',
           event: { category: 'WEDDING', destination: 'Pristina' },
           suggestedName: 'Pristina Wedding Celebration 2027',
           nameWasProvided: false,
@@ -489,11 +528,35 @@ test('client administrator completes the critical event operations flow', async 
           pageInfo: { hasNextPage: false, endCursor: null },
         },
       });
+    if (url.pathname.endsWith('/events/setup/start') && method === 'POST')
+      return route.fulfill({
+        json: {
+          sessionId: 'setup-a',
+          clientId: 'client-a',
+          clientName: 'Northstar Events',
+          resumed: false,
+          messages: [
+            {
+              id: 'welcome-a',
+              role: 'CONCIERGE',
+              content: 'Describe the event or attach a file.',
+            },
+          ],
+          draft: {
+            event: {},
+            facts: [],
+            schedule: [],
+            suggestedName: '',
+            nameWasProvided: false,
+          },
+        },
+      });
     if (url.pathname.endsWith('/events') && method === 'POST')
       return route.fulfill({ json: event() });
     if (url.pathname.endsWith('/events/setup/analyze') && method === 'POST')
       return route.fulfill({
         json: {
+          sessionId: 'setup-a',
           message:
             'I captured the retreat details. You can add another detail or correction below at any time.',
           event: {

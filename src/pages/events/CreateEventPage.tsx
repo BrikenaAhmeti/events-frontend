@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, FileText, Paperclip, Send, X } from 'lucide-react';
+import { Check, FileText, MessageSquarePlus, Paperclip, Send, X } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
@@ -50,6 +50,7 @@ type Draft = {
 };
 
 type SetupAnalysis = {
+  sessionId: string;
   message?: string;
   event: Partial<Draft>;
   suggestedName: string;
@@ -67,16 +68,35 @@ type SetupAnalysis = {
   extractedFacts: number;
   extractedScheduleItems: number;
   file: { name: string; size: number } | null;
+  messages?: Array<{
+    id: string;
+    role: 'USER' | 'CONCIERGE';
+    content: string;
+  }>;
 };
 
 type SetupStart = {
+  sessionId: string;
   clientId: string;
   clientName: string;
-  message: string;
+  resumed: boolean;
+  messages: Array<{
+    id: string;
+    role: 'USER' | 'CONCIERGE';
+    content: string;
+    metadata?: { fileName?: string };
+  }>;
+  draft: {
+    event: Partial<Draft>;
+    facts: SetupAnalysis['facts'];
+    schedule: SetupAnalysis['schedule'];
+    suggestedName: string;
+    nameWasProvided: boolean;
+  };
 };
 
 type SetupConversationMessage = {
-  id: number;
+  id: string;
   role: 'user' | 'assistant';
   text?: string;
   fileName?: string;
@@ -85,7 +105,6 @@ type SetupConversationMessage = {
 type SetupSubmission = {
   text: string;
   file: File | null;
-  context: string;
 };
 
 const emptyDraft: Draft = {
@@ -153,18 +172,16 @@ export function CreateEventPage() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const chatLogRef = useRef<HTMLDivElement>(null);
   const conversationEndRef = useRef<HTMLDivElement>(null);
-  const messageSequence = useRef(0);
   const defaultClient = params.get('clientId') ?? (user ? activeClientId(user) : '') ?? '';
   const [selectedClientId, setSelectedClientId] = useState(defaultClient);
   const [confirmedClientId, setConfirmedClientId] = useState('');
+  const [sessionId, setSessionId] = useState('');
   const [source, setSource] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [reviewed, setReviewed] = useState(false);
-  const [setupMessage, setSetupMessage] = useState('');
   const [selectedClientMessage, setSelectedClientMessage] = useState('');
   const [conversation, setConversation] = useState<SetupConversationMessage[]>([]);
-  const [eventFiles, setEventFiles] = useState<File[]>([]);
   const [suggestedName, setSuggestedName] = useState('');
   const [nameDecision, setNameDecision] = useState<'accepted' | 'pending' | 'rejected'>('pending');
   const [analyzedContent, setAnalyzedContent] = useState<
@@ -172,7 +189,7 @@ export function CreateEventPage() {
   >({ facts: [], schedule: [], extractedFacts: 0, extractedScheduleItems: 0 });
   const isSuperAdmin = user?.platformRole === 'SUPER_ADMIN';
   const clientId = user ? (isSuperAdmin ? confirmedClientId : defaultClient) : '';
-  const setupReady = Boolean(clientId);
+  const setupReady = Boolean(clientId && sessionId);
   const mayCreate = Boolean(user && can(user, 'EVENT_CREATE', clientId));
   const clients = useQuery({
     queryKey: isSuperAdmin ? ['event-client-directory'] : clientKeys.list(),
@@ -183,24 +200,56 @@ export function CreateEventPage() {
     enabled: Boolean(user),
   });
   const start = useMutation({
-    mutationFn: (nextClientId: string) =>
-      apiClient.post<SetupStart>('/events/setup/start', {
-        clientId: nextClientId,
-      }),
+    mutationFn: ({ nextClientId, restart = false }: { nextClientId: string; restart?: boolean }) =>
+      apiClient.post<SetupStart>('/events/setup/start', { clientId: nextClientId, restart }),
     onSuccess: (result) => {
       setConfirmedClientId(result.clientId);
-      setSetupMessage(result.message);
+      setSessionId(result.sessionId);
+      setConversation(
+        result.messages.map((message) => ({
+          id: message.id,
+          role: message.role === 'USER' ? 'user' : 'assistant',
+          text: message.content,
+          fileName: message.metadata?.fileName,
+        })),
+      );
+      const restored = result.draft;
+      const restoredEvent = restored.event ?? {};
+      setDraft({
+        ...emptyDraft,
+        ...Object.fromEntries(
+          Object.entries(restoredEvent).filter(([, value]) => typeof value === 'string'),
+        ),
+        startAt: asLocalDateTime(restoredEvent.startAt),
+        endAt: asLocalDateTime(restoredEvent.endAt),
+      });
+      const hasReviewedDetails =
+        Object.values(restoredEvent).some(Boolean) ||
+        (result.resumed && result.messages.some((message) => message.role === 'USER'));
+      setReviewed(hasReviewedDetails);
+      setSuggestedName(restored.suggestedName ?? '');
+      setNameDecision(
+        restored.nameWasProvided ? 'accepted' : restored.suggestedName ? 'pending' : 'pending',
+      );
+      setAnalyzedContent({
+        facts: restored.facts ?? [],
+        schedule: restored.schedule ?? [],
+        extractedFacts: restored.facts?.length ?? 0,
+        extractedScheduleItems: restored.schedule?.length ?? 0,
+      });
+      setSource('');
+      setFile(null);
       requestAnimationFrame(() => composerRef.current?.focus());
     },
   });
   const analyze = useMutation({
-    mutationFn: ({ text, file: submittedFile, context }: SetupSubmission) =>
+    mutationFn: ({ text, file: submittedFile }: SetupSubmission) =>
       apiClient.form<SetupAnalysis>(
         '/events/setup/analyze',
         {
           clientId,
+          sessionId,
           ...(text ? { text } : {}),
-          ...(context ? { context } : {}),
         },
         submittedFile ?? undefined,
       ),
@@ -208,13 +257,12 @@ export function CreateEventPage() {
       setConversation((current) => [
         ...current,
         {
-          id: ++messageSequence.current,
+          id: crypto.randomUUID(),
           role: 'user',
           ...(text ? { text } : {}),
           ...(submittedFile ? { fileName: submittedFile.name } : {}),
         },
       ]);
-      if (submittedFile) setEventFiles((current) => [...current, submittedFile]);
       setSource('');
       setFile(null);
     },
@@ -238,7 +286,9 @@ export function CreateEventPage() {
       setConversation((current) => [
         ...current,
         {
-          id: ++messageSequence.current,
+          id:
+            result.messages?.find((message) => message.role === 'CONCIERGE')?.id ??
+            crypto.randomUUID(),
           role: 'assistant',
           text: result.message?.trim() || t('reviewCompleteMessage'),
         },
@@ -250,6 +300,7 @@ export function CreateEventPage() {
     mutationFn: async () => {
       const event = await apiClient.post<EventSummary>('/events', {
         clientId,
+        setupSessionId: sessionId,
         ...Object.fromEntries(
           Object.entries(draft).filter(([, value]) => typeof value === 'string' && value.trim()),
         ),
@@ -258,8 +309,6 @@ export function CreateEventPage() {
         facts: analyzedContent.facts,
         schedule: analyzedContent.schedule,
       });
-      for (const eventFile of eventFiles)
-        await apiClient.upload(`/events/${event.id}/documents`, eventFile);
       return event;
     },
     onSuccess: (event) => void navigate(`/app/events/${event.id}/concierge`),
@@ -269,10 +318,9 @@ export function CreateEventPage() {
   const selectClient = (nextClientId: string) => {
     setSelectedClientId(nextClientId);
     setConfirmedClientId('');
-    setSetupMessage('');
+    setSessionId('');
     setSelectedClientMessage('');
     setConversation([]);
-    setEventFiles([]);
     setSource('');
     setFile(null);
     start.reset();
@@ -291,7 +339,7 @@ export function CreateEventPage() {
   const saveClient = () => {
     const selectedClient = clients.data?.find((client) => client.id === selectedClientId);
     setSelectedClientMessage(selectedClient?.name ?? t('client'));
-    start.mutate(selectedClientId);
+    start.mutate({ nextClientId: selectedClientId });
   };
   const submitBrief = () => {
     const text = source.trim();
@@ -299,9 +347,6 @@ export function CreateEventPage() {
     analyze.mutate({
       text,
       file,
-      context: reviewed
-        ? JSON.stringify({ event: draft, facts: analyzedContent.facts, schedule: analyzedContent.schedule })
-        : '',
     });
   };
   const handleBriefSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -313,10 +358,9 @@ export function CreateEventPage() {
     event.preventDefault();
     submitBrief();
   };
-  const canSubmit =
-    Boolean(clientId && draft.name.trim().length >= 2 && draft.category) &&
-    nameDecision === 'accepted';
   const draftCompleteness = evaluateDraft(draft);
+  const canSubmit =
+    Boolean(clientId && sessionId) && draftCompleteness.ready && nameDecision === 'accepted';
   const composerDisabled = !setupReady || start.isPending || analyze.isPending || create.isPending;
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -325,7 +369,11 @@ export function CreateEventPage() {
         conversationEnd.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
     return () => cancelAnimationFrame(frame);
-  }, [analyze.isPending, conversation, nameDecision, reviewed, setupMessage, start.isPending]);
+  }, [analyze.isPending, conversation, nameDecision, reviewed, start.isPending]);
+  useEffect(() => {
+    if (!user || isSuperAdmin || !defaultClient || sessionId || start.status !== 'idle') return;
+    start.mutate({ nextClientId: defaultClient });
+  }, [defaultClient, isSuperAdmin, sessionId, start, user]);
   if (user && !isSuperAdmin && defaultClient && !mayCreate)
     return <Navigate to="/app/forbidden" replace />;
   return (
@@ -334,13 +382,26 @@ export function CreateEventPage() {
         className="flex h-[calc(100dvh-7.5rem)] min-h-[36rem] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm md:h-[calc(100dvh-4rem)]"
         aria-labelledby="event-setup-title"
       >
-        <header className="border-b border-border bg-surface-sunken/45 px-4 py-3.5 sm:px-6">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-            {t('guidedSetup')}
-          </p>
-          <h1 id="event-setup-title" className="mt-1 font-display text-2xl">
-            {t('createTitle')}
-          </h1>
+        <header className="flex items-center justify-between gap-4 border-b border-border bg-surface-sunken/45 px-4 py-3.5 sm:px-6">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
+              {t('guidedSetup')}
+            </p>
+            <h1 id="event-setup-title" className="mt-1 font-display text-2xl">
+              {t('createTitle')}
+            </h1>
+          </div>
+          {setupReady && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={start.isPending || analyze.isPending || create.isPending}
+              onClick={() => start.mutate({ nextClientId: clientId, restart: true })}
+            >
+              <MessageSquarePlus className="size-4" />
+              {t('startNewSetupChat')}
+            </Button>
+          )}
         </header>
         <div
           ref={chatLogRef}
@@ -349,7 +410,6 @@ export function CreateEventPage() {
           aria-live="polite"
           aria-label={t('setupConversation')}
         >
-          {!isSuperAdmin && <ChatBubble>{t('setupWelcome')}</ChatBubble>}
           {isSuperAdmin && (
             <ChatBubble>
               <p className="mb-4 text-sm text-muted-foreground">{t('chooseClientPrompt')}</p>
@@ -390,7 +450,6 @@ export function CreateEventPage() {
             </UserChatBubble>
           )}
           {start.isPending && <TypingBubble label={t('preparingNextStep')} />}
-          {setupMessage && <ChatBubble>{setupMessage}</ChatBubble>}
           {start.error && <ChatBubble danger>{start.error.message}</ChatBubble>}
           {conversation.map((message) =>
             message.role === 'assistant' ? (
