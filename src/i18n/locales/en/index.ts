@@ -31,6 +31,8 @@ export const en = {
     primaryNavigation: 'Primary navigation',
     navigationMenu: 'Navigation menu',
     closeNavigation: 'Close navigation',
+    expandNavigation: 'Expand navigation',
+    collapseNavigation: 'Collapse navigation',
     loadingLabel: 'Loading',
     colorTheme: 'Color theme',
     statuses: {
