@@ -1,10 +1,22 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, FileText, MessageSquarePlus, Paperclip, Send, X } from 'lucide-react';
+import {
+  CalendarDays,
+  Check,
+  Download,
+  FileText,
+  MapPin,
+  MessageSquarePlus,
+  Paperclip,
+  Send,
+  Sparkles,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/atoms/Button';
-import { Input, Textarea } from '../../components/atoms/Input';
+import { Textarea } from '../../components/atoms/Input';
 import { FormField } from '../../components/molecules/FormField';
 import {
   AssistantMessage as ChatBubble,
@@ -12,23 +24,13 @@ import {
   UserMessage as UserChatBubble,
 } from '../../components/molecules/ChatMessage';
 import { CustomSelect } from '../../components/molecules/CustomSelect';
+import { DateTimePicker } from '../../components/molecules/DateTimePicker';
 import { activeClientId, can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
 import { CompletenessPanel } from '../../features/events/CompletenessPanel';
 import { apiClient } from '../../lib/api/api-client';
 import { clientKeys } from '../../lib/api/query-keys';
 import type { Client, EventCompleteness, EventSummary, Page } from '../../types/domain';
-
-const categories = [
-  'CORPORATE_INCENTIVE',
-  'CONFERENCE',
-  'CORPORATE_RETREAT',
-  'WEDDING',
-  'SPORTS_TRAVEL',
-  'GROUP_TOUR',
-  'MEETING',
-  'OTHER',
-] as const;
 
 type Draft = {
   name: string;
@@ -68,6 +70,7 @@ type SetupAnalysis = {
   extractedFacts: number;
   extractedScheduleItems: number;
   file: { name: string; size: number } | null;
+  template?: { kind: 'EVENT_BRIEF'; fileName: string };
   messages?: Array<{
     id: string;
     role: 'USER' | 'CONCIERGE';
@@ -84,7 +87,7 @@ type SetupStart = {
     id: string;
     role: 'USER' | 'CONCIERGE';
     content: string;
-    metadata?: { fileName?: string };
+    metadata?: { fileName?: string; setupTemplate?: 'EVENT_BRIEF' };
   }>;
   draft: {
     event: Partial<Draft>;
@@ -100,16 +103,23 @@ type SetupConversationMessage = {
   role: 'user' | 'assistant';
   text?: string;
   fileName?: string;
+  template?: 'EVENT_BRIEF';
 };
 
 type SetupSubmission = {
   text: string;
   file: File | null;
+  displayText?: string;
+  startAt?: string;
+  endAt?: string;
+  timezone?: string;
 };
+
+type GuidedSetupStep = 'basics' | 'dates' | 'location' | 'organizer' | 'details' | 'ready';
 
 const emptyDraft: Draft = {
   name: '',
-  category: 'OTHER',
+  category: '',
   description: '',
   destination: '',
   venue: '',
@@ -182,8 +192,6 @@ export function CreateEventPage() {
   const [reviewed, setReviewed] = useState(false);
   const [selectedClientMessage, setSelectedClientMessage] = useState('');
   const [conversation, setConversation] = useState<SetupConversationMessage[]>([]);
-  const [suggestedName, setSuggestedName] = useState('');
-  const [nameDecision, setNameDecision] = useState<'accepted' | 'pending' | 'rejected'>('pending');
   const [analyzedContent, setAnalyzedContent] = useState<
     Pick<SetupAnalysis, 'facts' | 'schedule' | 'extractedFacts' | 'extractedScheduleItems'>
   >({ facts: [], schedule: [], extractedFacts: 0, extractedScheduleItems: 0 });
@@ -211,6 +219,7 @@ export function CreateEventPage() {
           role: message.role === 'USER' ? 'user' : 'assistant',
           text: message.content,
           fileName: message.metadata?.fileName,
+          template: message.metadata?.setupTemplate,
         })),
       );
       const restored = result.draft;
@@ -223,14 +232,8 @@ export function CreateEventPage() {
         startAt: asLocalDateTime(restoredEvent.startAt),
         endAt: asLocalDateTime(restoredEvent.endAt),
       });
-      const hasReviewedDetails =
-        Object.values(restoredEvent).some(Boolean) ||
-        (result.resumed && result.messages.some((message) => message.role === 'USER'));
+      const hasReviewedDetails = Object.values(restoredEvent).some(Boolean);
       setReviewed(hasReviewedDetails);
-      setSuggestedName(restored.suggestedName ?? '');
-      setNameDecision(
-        restored.nameWasProvided ? 'accepted' : restored.suggestedName ? 'pending' : 'pending',
-      );
       setAnalyzedContent({
         facts: restored.facts ?? [],
         schedule: restored.schedule ?? [],
@@ -243,23 +246,26 @@ export function CreateEventPage() {
     },
   });
   const analyze = useMutation({
-    mutationFn: ({ text, file: submittedFile }: SetupSubmission) =>
+    mutationFn: ({ text, file: submittedFile, startAt, endAt, timezone }: SetupSubmission) =>
       apiClient.form<SetupAnalysis>(
         '/events/setup/analyze',
         {
           clientId,
           sessionId,
           ...(text ? { text } : {}),
+          ...(startAt ? { startAt } : {}),
+          ...(endAt ? { endAt } : {}),
+          ...(timezone ? { timezone } : {}),
         },
         submittedFile ?? undefined,
       ),
-    onMutate: ({ text, file: submittedFile }) => {
+    onMutate: ({ text, displayText, file: submittedFile }) => {
       setConversation((current) => [
         ...current,
         {
           id: crypto.randomUUID(),
           role: 'user',
-          ...(text ? { text } : {}),
+          ...(text ? { text: displayText ?? text } : {}),
           ...(submittedFile ? { fileName: submittedFile.name } : {}),
         },
       ]);
@@ -274,15 +280,13 @@ export function CreateEventPage() {
         startAt: result.event.startAt ? asLocalDateTime(result.event.startAt) : current.startAt,
         endAt: result.event.endAt ? asLocalDateTime(result.event.endAt) : current.endAt,
       }));
-      setSuggestedName(result.suggestedName);
-      setNameDecision(result.nameWasProvided ? 'accepted' : 'pending');
       setAnalyzedContent({
         facts: result.facts ?? [],
         schedule: result.schedule ?? [],
         extractedFacts: result.extractedFacts,
         extractedScheduleItems: result.extractedScheduleItems,
       });
-      setReviewed(true);
+      if (!result.template) setReviewed(true);
       setConversation((current) => [
         ...current,
         {
@@ -291,6 +295,7 @@ export function CreateEventPage() {
             crypto.randomUUID(),
           role: 'assistant',
           text: result.message?.trim() || t('reviewCompleteMessage'),
+          template: result.template?.kind,
         },
       ]);
     },
@@ -313,8 +318,6 @@ export function CreateEventPage() {
     },
     onSuccess: (event) => void navigate(`/app/events/${event.id}/concierge`),
   });
-  const updateDraft = (field: keyof Draft, value: string) =>
-    setDraft((current) => ({ ...current, [field]: value }));
   const selectClient = (nextClientId: string) => {
     setSelectedClientId(nextClientId);
     setConfirmedClientId('');
@@ -327,8 +330,6 @@ export function CreateEventPage() {
     analyze.reset();
     setDraft(emptyDraft);
     setReviewed(false);
-    setSuggestedName('');
-    setNameDecision('pending');
     setAnalyzedContent({
       facts: [],
       schedule: [],
@@ -349,6 +350,23 @@ export function CreateEventPage() {
       file,
     });
   };
+  const sendChoice = (text: string) => {
+    if (!setupReady || analyze.isPending) return;
+    analyze.mutate({ text, file: null });
+  };
+  const sendDates = (startAt: string, endAt: string, timezone: string) => {
+    if (!setupReady || analyze.isPending) return;
+    const startAtIso = new Date(startAt).toISOString();
+    const endAtIso = new Date(endAt).toISOString();
+    analyze.mutate({
+      text: `Start date and time: ${startAtIso}\nEnd date and time: ${endAtIso}\nTimezone: ${timezone}`,
+      displayText: `${formatDraftDate(startAt)} – ${formatDraftDate(endAt)} · ${timezone}`,
+      file: null,
+      startAt: startAtIso,
+      endAt: endAtIso,
+      timezone,
+    });
+  };
   const handleBriefSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     submitBrief();
@@ -359,8 +377,8 @@ export function CreateEventPage() {
     submitBrief();
   };
   const draftCompleteness = evaluateDraft(draft);
-  const canSubmit =
-    Boolean(clientId && sessionId) && draftCompleteness.ready && nameDecision === 'accepted';
+  const canSubmit = Boolean(clientId && sessionId) && draftCompleteness.ready;
+  const guidedStep = getGuidedSetupStep(draftCompleteness);
   const composerDisabled = !setupReady || start.isPending || analyze.isPending || create.isPending;
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -369,7 +387,7 @@ export function CreateEventPage() {
         conversationEnd.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
     return () => cancelAnimationFrame(frame);
-  }, [analyze.isPending, conversation, nameDecision, reviewed, start.isPending]);
+  }, [analyze.isPending, conversation, reviewed, start.isPending]);
   useEffect(() => {
     if (!user || isSuperAdmin || !defaultClient || sessionId || start.status !== 'idle') return;
     start.mutate({ nextClientId: defaultClient });
@@ -448,7 +466,10 @@ export function CreateEventPage() {
           {start.error && <ChatBubble danger>{start.error.message}</ChatBubble>}
           {conversation.map((message) =>
             message.role === 'assistant' ? (
-              <ChatBubble key={message.id}>{message.text}</ChatBubble>
+              <ChatBubble key={message.id} wide={Boolean(message.template)}>
+                {message.text && <p className="whitespace-pre-wrap">{message.text}</p>}
+                {message.template === 'EVENT_BRIEF' && <EventBriefTemplateCard />}
+              </ChatBubble>
             ) : (
               <UserChatBubble key={message.id}>
                 {message.text && <p className="whitespace-pre-wrap">{message.text}</p>}
@@ -461,105 +482,68 @@ export function CreateEventPage() {
               </UserChatBubble>
             ),
           )}
+          {setupReady &&
+            !reviewed &&
+            !conversation.some((message) => message.role === 'user') &&
+            !analyze.isPending && (
+              <ChatBubble wide>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    className="group rounded-xl border border-border bg-surface p-4 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+                    onClick={() => sendChoice(t('stepByStepChoiceMessage'))}
+                  >
+                    <span className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground">
+                      <MessageSquarePlus className="size-5" />
+                    </span>
+                    <span className="mt-3 block font-semibold">{t('stepByStepChoice')}</span>
+                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+                      {t('stepByStepChoiceDescription')}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="group rounded-xl border border-border bg-surface p-4 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+                    onClick={() => sendChoice(t('fileTemplateChoiceMessage'))}
+                  >
+                    <span className="grid size-10 place-items-center rounded-xl bg-accent text-accent-foreground">
+                      <FileText className="size-5" />
+                    </span>
+                    <span className="mt-3 block font-semibold">{t('fileTemplateChoice')}</span>
+                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+                      {t('fileTemplateChoiceDescription')}
+                    </span>
+                  </button>
+                </div>
+              </ChatBubble>
+            )}
           {analyze.isPending && <TypingBubble label={t('reviewingEventInformation')} />}
-          {analyze.error && (
-            <ChatBubble danger>
-              <p>{analyze.error.message}</p>
-              <Button
-                className="mt-3"
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  setReviewed(true);
-                  setNameDecision('rejected');
-                }}
-              >
-                {t('enterManually')}
-              </Button>
+          {analyze.error && <ChatBubble danger>{analyze.error.message}</ChatBubble>}
+          {reviewed && guidedStep === 'dates' && !analyze.isPending && (
+            <ChatBubble wide>
+              <EventDateResponseCard
+                initialStartAt={draft.startAt}
+                initialEndAt={draft.endAt}
+                disabled={create.isPending}
+                onSubmit={sendDates}
+              />
+            </ChatBubble>
+          )}
+          {reviewed && canSubmit && (
+            <ChatBubble wide>
+              <EventDraftSummary
+                draft={draft}
+                completeness={draftCompleteness}
+                facts={analyzedContent.extractedFacts}
+                schedule={analyzedContent.extractedScheduleItems}
+                createError={create.error?.message}
+                createPending={create.isPending}
+                canSubmit={canSubmit}
+                onCreate={() => create.mutate()}
+              />
             </ChatBubble>
           )}
           <div ref={conversationEndRef} className="h-px" aria-hidden />
-          {reviewed && (
-            <>
-              {nameDecision === 'pending' && (
-                <ChatBubble>
-                  <p className="font-semibold">{t('nameSuggestion')}</p>
-                  <p className="mt-2 font-display text-2xl">{suggestedName}</p>
-                  <div className="mt-4 flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        updateDraft('name', suggestedName);
-                        setNameDecision('accepted');
-                      }}
-                    >
-                      <Check className="size-4" />
-                      {t('acceptName')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => setNameDecision('rejected')}
-                    >
-                      {t('rejectName')}
-                    </Button>
-                  </div>
-                </ChatBubble>
-              )}
-              {nameDecision === 'rejected' && (
-                <ChatBubble>
-                  <FormField label={t('provideEventName')} htmlFor="custom-event-name">
-                    <Input
-                      id="custom-event-name"
-                      value={draft.name}
-                      onChange={(event) => updateDraft('name', event.target.value)}
-                    />
-                  </FormField>
-                  <Button
-                    className="mt-3"
-                    size="sm"
-                    disabled={draft.name.trim().length < 2}
-                    onClick={() => setNameDecision('accepted')}
-                  >
-                    {t('useThisName')}
-                  </Button>
-                </ChatBubble>
-              )}
-              {nameDecision === 'accepted' && (
-                <ChatBubble wide>
-                  <p className="flex items-center gap-2 font-semibold">
-                    <Check className="size-4 text-success" />
-                    {t('detailsReviewed')}
-                  </p>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {t('completeMissingDetails')}
-                  </p>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {t('analysisSummary', {
-                      facts: analyzedContent.extractedFacts,
-                      schedule: analyzedContent.extractedScheduleItems,
-                    })}
-                  </p>
-                  <div className="mt-5">
-                    <CompletenessPanel completeness={draftCompleteness} />
-                  </div>
-                  <EventDetailsForm draft={draft} update={updateDraft} />
-                  {create.error && (
-                    <p className="mt-4 text-sm text-danger">{create.error.message}</p>
-                  )}
-                  <Button
-                    className="mt-6 w-full sm:w-auto"
-                    size="lg"
-                    loading={create.isPending}
-                    disabled={!canSubmit}
-                    onClick={() => create.mutate()}
-                  >
-                    {t('continue')}
-                  </Button>
-                </ChatBubble>
-              )}
-            </>
-          )}
         </div>
         <form className="border-t border-border bg-surface p-3 sm:p-4" onSubmit={handleBriefSubmit}>
           <div
@@ -580,7 +564,7 @@ export function CreateEventPage() {
                 !setupReady
                   ? t('saveClientBeforeWriting')
                   : reviewed
-                    ? t('addMoreEventInformation')
+                    ? setupComposerPlaceholder(guidedStep, t)
                     : t('eventBriefPlaceholder')
               }
               maxLength={80_000}
@@ -641,73 +625,277 @@ export function CreateEventPage() {
   );
 }
 
-function EventDetailsForm({
-  draft,
-  update,
+function EventDateResponseCard({
+  initialStartAt,
+  initialEndAt,
+  disabled,
+  onSubmit,
 }: {
-  draft: Draft;
-  update: (field: keyof Draft, value: string) => void;
+  initialStartAt: string;
+  initialEndAt: string;
+  disabled: boolean;
+  onSubmit: (startAt: string, endAt: string, timezone: string) => void;
 }) {
   const { t } = useTranslation('events');
-  const fields: Array<{ key: keyof Draft; label: string; type?: string; required?: boolean }> = [
-    { key: 'name', label: t('name'), required: true },
-    { key: 'description', label: t('description'), required: true },
-    { key: 'destination', label: t('destination'), required: !draft.venue },
-    { key: 'venue', label: t('venue'), required: !draft.destination },
-    { key: 'venueAddress', label: t('venueAddress') },
-    { key: 'startAt', label: t('startAt'), type: 'datetime-local', required: true },
-    { key: 'endAt', label: t('endAt'), type: 'datetime-local', required: true },
-    { key: 'timezone', label: t('timezone'), required: true },
-    { key: 'organizerName', label: t('organizerName'), required: true },
-    { key: 'organizerEmail', label: t('organizerEmail'), type: 'email', required: true },
-  ];
+  const [startAt, setStartAt] = useState(initialStartAt);
+  const [endAt, setEndAt] = useState(initialEndAt);
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const validRange = Boolean(
+    startAt && endAt && new Date(endAt).getTime() > new Date(startAt).getTime(),
+  );
   return (
-    <div className="mt-5 grid gap-4 sm:grid-cols-2">
-      <FormField label={t('category')} htmlFor="setup-category">
-        <CustomSelect
-          id="setup-category"
-          label={t('category')}
-          value={draft.category}
-          options={categories.map((category) => ({
-            value: category,
-            label: t(`categories.${category}`),
-          }))}
-          onChange={(value) => update('category', value)}
-        />
-      </FormField>
-      {fields.map((field) => (
-        <FormField
-          key={field.key}
-          label={`${field.label}${field.required ? ' *' : ''}`}
-          htmlFor={`setup-${field.key}`}
-        >
-          <Input
-            id={`setup-${field.key}`}
-            type={field.type}
-            value={draft[field.key]}
-            onChange={(event) => update(field.key, event.target.value)}
+    <div aria-label={t('chooseEventDates')}>
+      <p className="text-sm font-semibold">{t('chooseEventDates')}</p>
+      <p className="mt-1 text-sm leading-6 text-muted-foreground">
+        {t('chooseEventDatesDescription', { timezone })}
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <FormField label={t('startAt')} htmlFor="setup-start-at">
+          <DateTimePicker
+            id="setup-start-at"
+            label={t('startAt')}
+            value={startAt}
+            onChange={setStartAt}
+            disabled={disabled}
           />
         </FormField>
-      ))}
-      {(
-        [
-          ['venueDetails', t('venueDetails')],
-          ['restroomInformation', t('restroomInformation')],
-          ['accessibilityInformation', t('accessibilityInformation')],
-          ['parkingInformation', t('parkingInformation')],
-          ['wifiInformation', t('wifiInformation')],
-        ] as Array<[keyof Draft, string]>
-      ).map(([key, label]) => (
-        <div key={key} className="sm:col-span-2">
-          <FormField label={label} htmlFor={`setup-${key}`}>
-            <Textarea
-              id={`setup-${key}`}
-              value={draft[key]}
-              onChange={(event) => update(key, event.target.value)}
-            />
-          </FormField>
-        </div>
-      ))}
+        <FormField label={t('endAt')} htmlFor="setup-end-at">
+          <DateTimePicker
+            id="setup-end-at"
+            label={t('endAt')}
+            value={endAt}
+            onChange={setEndAt}
+            disabled={disabled}
+          />
+        </FormField>
+      </div>
+      {startAt && endAt && !validRange && (
+        <p className="mt-3 text-sm text-danger">{t('endAfterStart')}</p>
+      )}
+      <Button
+        className="mt-4"
+        size="sm"
+        disabled={!validRange || disabled}
+        onClick={() => onSubmit(startAt, endAt, timezone)}
+      >
+        <Send className="size-4" />
+        {t('sendDates')}
+      </Button>
     </div>
   );
+}
+
+function getGuidedSetupStep(completeness: EventCompleteness): GuidedSetupStep {
+  const missing = new Set(completeness.missing);
+  if (['name', 'description', 'category'].some((field) => missing.has(field))) return 'basics';
+  if (
+    ['startAt', 'endAt', 'timezone'].some((field) => missing.has(field)) ||
+    completeness.warnings.some((warning) =>
+      ['endBeforeStart', 'invalidTimezone'].includes(warning),
+    )
+  )
+    return 'dates';
+  if (missing.has('location')) return 'location';
+  if (missing.has('organizerName') || missing.has('organizerEmail')) return 'organizer';
+  return completeness.ready ? 'ready' : 'details';
+}
+
+function setupComposerPlaceholder(
+  step: GuidedSetupStep,
+  t: ReturnType<typeof useTranslation<'events'>>['t'],
+): string {
+  if (step === 'basics') return t('basicsChatPlaceholder');
+  if (step === 'dates') return t('datesChatPlaceholder');
+  if (step === 'location') return t('locationChatPlaceholder');
+  if (step === 'organizer') return t('organizerChatPlaceholder');
+  return t('addMoreEventInformation');
+}
+
+function EventDraftSummary({
+  draft,
+  completeness,
+  facts,
+  schedule,
+  createError,
+  createPending,
+  canSubmit,
+  onCreate,
+}: {
+  draft: Draft;
+  completeness: EventCompleteness;
+  facts: number;
+  schedule: number;
+  createError?: string;
+  createPending: boolean;
+  canSubmit: boolean;
+  onCreate: () => void;
+}) {
+  const { t } = useTranslation('events');
+  return (
+    <div aria-label={t('liveEventBrief')}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-primary">
+            <Sparkles className="size-4" />
+            {t('liveEventBrief')}
+          </p>
+          <h2 className="mt-2 font-display text-2xl">
+            {draft.name || t('eventBriefBuilding')}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t(`categories.${draft.category}`)}
+          </p>
+        </div>
+        <span className="rounded-full bg-primary/10 px-3 py-1.5 text-sm font-bold text-primary">
+          {completeness.score}%
+        </span>
+      </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <SummaryItem
+          icon={MapPin}
+          label={t('location')}
+          value={[draft.venue, draft.destination].filter(Boolean).join(', ') || t('waitingForAnswer')}
+        />
+        <SummaryItem
+          icon={CalendarDays}
+          label={t('dateRange')}
+          value={
+            draft.startAt
+              ? `${formatDraftDate(draft.startAt)}${draft.endAt ? ` – ${formatDraftDate(draft.endAt)}` : ''}`
+              : t('waitingForAnswer')
+          }
+        />
+        <SummaryItem
+          icon={UserRound}
+          label={t('organizer')}
+          value={
+            [draft.organizerName, draft.organizerEmail].filter(Boolean).join(' · ') ||
+            t('waitingForAnswer')
+          }
+        />
+      </div>
+      {draft.description && (
+        <div className="mt-3 rounded-xl bg-surface-sunken p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+            {t('purpose')}
+          </p>
+          <p className="mt-2 text-sm leading-6">{draft.description}</p>
+        </div>
+      )}
+      <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <span className="rounded-full border border-border px-3 py-1.5">
+          {t('dynamicDetailCount', { count: facts })}
+        </span>
+        <span className="rounded-full border border-border px-3 py-1.5">
+          {t('scheduleItemCount', { count: schedule })}
+        </span>
+      </div>
+      <div className="mt-5">
+        <CompletenessPanel completeness={completeness} />
+      </div>
+      <p className="mt-4 text-sm leading-6 text-muted-foreground">
+        {canSubmit ? t('chatReviewReady') : t('chatKeepAnswering')}
+      </p>
+      {createError && <p className="mt-4 text-sm text-danger">{createError}</p>}
+      {canSubmit && (
+        <Button className="mt-5 w-full sm:w-auto" size="lg" loading={createPending} onClick={onCreate}>
+          {t('continue')}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function SummaryItem({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof MapPin;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-surface p-3.5">
+      <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">
+        <Icon className="size-4 text-primary" />
+        {label}
+      </p>
+      <p className="mt-2 text-sm font-semibold leading-5">{value}</p>
+    </div>
+  );
+}
+
+function EventBriefTemplateCard() {
+  const { t } = useTranslation('events');
+  return (
+    <div className="mt-4 overflow-hidden rounded-xl border border-primary/20 bg-primary/5">
+      <div className="flex items-start gap-3 p-4">
+        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
+          <FileText className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">{t('eventBriefTemplate')}</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {t('eventBriefTemplateDescription')}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-primary/15 bg-surface/60 px-4 py-3">
+        <span className="text-xs font-medium text-muted-foreground">
+          feliam-event-brief-template.txt
+        </span>
+        <Button size="sm" onClick={downloadEventBriefTemplate}>
+          <Download className="size-4" />
+          {t('downloadTemplate')}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function downloadEventBriefTemplate() {
+  const content = `FELIAM EVENT BRIEF
+
+Fill in what you know and leave anything else blank. Save this file, then attach it in the event setup chat.
+
+EVENT BASICS
+Event name:
+Event type or purpose:
+Description:
+Destination or city:
+Venue:
+Venue address:
+Start date and time:
+End date and time:
+Timezone, for example Europe/Madrid:
+Organizer name:
+Organizer email:
+
+SCHEDULE
+Add one activity per line using: Date | Start time | End time | Activity | Location
+
+
+ADDITIONAL EVENT DETAILS
+Add any details that matter for this event using: Title | Description
+Examples: Dress code | Business casual
+Examples: Shuttle pickup | Hotel lobby at 08:30
+Examples: Accessibility | Step-free entrance is on the east side
+Examples: Wi-Fi | Network and access instructions will be shared at check-in
+
+`;
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'feliam-event-brief-template.txt';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function formatDraftDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }

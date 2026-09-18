@@ -1,8 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CalendarDays, Mail, MapPin, PencilLine } from 'lucide-react';
+import { CalendarDays, Mail, MapPin, PencilLine, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { z } from 'zod';
@@ -10,6 +10,7 @@ import { useToast } from '../../app/providers/toast-provider';
 import { Button } from '../../components/atoms/Button';
 import { Input, Textarea } from '../../components/atoms/Input';
 import { ConfirmDialog } from '../../components/molecules/ConfirmDialog';
+import { DateTimePicker } from '../../components/molecules/DateTimePicker';
 import { FormField } from '../../components/molecules/FormField';
 import { can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
@@ -24,16 +25,19 @@ const schema = z.object({
   destination: z.string().min(2),
   venue: z.string(),
   venueAddress: z.string(),
-  venueDetails: z.string(),
-  restroomInformation: z.string(),
-  accessibilityInformation: z.string(),
-  parkingInformation: z.string(),
-  wifiInformation: z.string(),
   startAt: z.string().min(1),
   endAt: z.string().min(1),
   timezone: z.string().min(3),
   organizerName: z.string().min(2),
   organizerEmail: z.email(),
+  details: z
+    .array(
+      z.object({
+        title: z.string().trim().min(1).max(160),
+        description: z.string().trim().min(1).max(5_000),
+      }),
+    )
+    .max(200),
 });
 type Values = z.infer<typeof schema>;
 const localDateTime = (value: string | null) =>
@@ -59,31 +63,31 @@ export function EventOverviewPage() {
       destination: event.destination ?? '',
       venue: event.venue ?? '',
       venueAddress: event.venueAddress ?? '',
-      venueDetails: event.venueDetails ?? '',
-      restroomInformation: event.restroomInformation ?? '',
-      accessibilityInformation: event.accessibilityInformation ?? '',
-      parkingInformation: event.parkingInformation ?? '',
-      wifiInformation: event.wifiInformation ?? '',
       startAt: localDateTime(event.startAt),
       endAt: localDateTime(event.endAt),
       timezone: event.timezone ?? '',
       organizerName: event.organizerName ?? '',
       organizerEmail: event.organizerEmail ?? '',
+      details: event.facts.map((fact) => ({
+        title: formatFactTitle(fact.key),
+        description: fact.value,
+      })),
     },
   });
+  const details = useFieldArray({ control: form.control, name: 'details' });
   const update = useMutation({
-    mutationFn: (values: Values) =>
+    mutationFn: ({ details: submittedDetails, ...values }: Values) =>
       apiClient.patch<EventDetail>(`/events/${event.id}`, {
         ...values,
         venue: values.venue || null,
         venueAddress: values.venueAddress || null,
-        venueDetails: values.venueDetails || null,
-        restroomInformation: values.restroomInformation || null,
-        accessibilityInformation: values.accessibilityInformation || null,
-        parkingInformation: values.parkingInformation || null,
-        wifiInformation: values.wifiInformation || null,
         startAt: new Date(values.startAt).toISOString(),
         endAt: new Date(values.endAt).toISOString(),
+        facts: submittedDetails.map((detail) => ({
+          key: detail.title,
+          value: detail.description,
+          confidence: 1,
+        })),
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: eventKeys.detail(event.id) });
@@ -100,6 +104,27 @@ export function EventOverviewPage() {
       void navigate(`/app/events/${event.id}/concierge`);
     },
   });
+  const additionalDetails = [
+    ...event.facts.map((fact) => ({ title: formatFactTitle(fact.key), description: fact.value })),
+    ...(event.venueAddress
+      ? [{ title: t('venueAddress'), description: event.venueAddress }]
+      : []),
+    ...(event.venueDetails
+      ? [{ title: t('venueDetails'), description: event.venueDetails }]
+      : []),
+    ...(event.restroomInformation
+      ? [{ title: t('restroomInformation'), description: event.restroomInformation }]
+      : []),
+    ...(event.accessibilityInformation
+      ? [{ title: t('accessibilityInformation'), description: event.accessibilityInformation }]
+      : []),
+    ...(event.parkingInformation
+      ? [{ title: t('parkingInformation'), description: event.parkingInformation }]
+      : []),
+    ...(event.wifiInformation
+      ? [{ title: t('wifiInformation'), description: event.wifiInformation }]
+      : []),
+  ];
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="space-y-5">
@@ -137,10 +162,32 @@ export function EventOverviewPage() {
                 </FormField>
               </div>
               <FormField label={t('startAt')} htmlFor="start">
-                <Input id="start" type="datetime-local" {...form.register('startAt')} />
+                <Controller
+                  control={form.control}
+                  name="startAt"
+                  render={({ field }) => (
+                    <DateTimePicker
+                      id="start"
+                      label={t('startAt')}
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
               </FormField>
               <FormField label={t('endAt')} htmlFor="end">
-                <Input id="end" type="datetime-local" {...form.register('endAt')} />
+                <Controller
+                  control={form.control}
+                  name="endAt"
+                  render={({ field }) => (
+                    <DateTimePicker
+                      id="end"
+                      label={t('endAt')}
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
               </FormField>
               <FormField label={t('timezone')} htmlFor="timezone">
                 <Input id="timezone" placeholder="Europe/Madrid" {...form.register('timezone')} />
@@ -153,21 +200,69 @@ export function EventOverviewPage() {
                   <Input id="organizer-email" type="email" {...form.register('organizerEmail')} />
                 </FormField>
               </div>
-              {(
-                [
-                  ['venueDetails', t('venueDetails')],
-                  ['restroomInformation', t('restroomInformation')],
-                  ['accessibilityInformation', t('accessibilityInformation')],
-                  ['parkingInformation', t('parkingInformation')],
-                  ['wifiInformation', t('wifiInformation')],
-                ] as Array<[keyof Values, string]>
-              ).map(([key, label]) => (
-                <div key={key} className="sm:col-span-2">
-                  <FormField label={label} htmlFor={`event-${key}`}>
-                    <Textarea id={`event-${key}`} {...form.register(key)} />
-                  </FormField>
+              <div className="rounded-xl border border-border bg-surface-sunken/35 p-4 sm:col-span-2">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold">{t('additionalDetails')}</h3>
+                    <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                      {t('additionalDetailsDescription')}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => details.append({ title: '', description: '' })}
+                  >
+                    <Plus className="size-4" />
+                    {t('addDetail')}
+                  </Button>
                 </div>
-              ))}
+                <p className="mt-3 text-xs text-muted-foreground">{t('additionalDetailsExamples')}</p>
+                <div className="mt-4 space-y-3">
+                  {details.fields.length === 0 && (
+                    <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                      {t('noAdditionalDetails')}
+                    </p>
+                  )}
+                  {details.fields.map((detail, index) => (
+                    <div
+                      key={detail.id}
+                      className="grid gap-3 rounded-xl border border-border bg-surface p-3 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)_auto] sm:items-start"
+                    >
+                      <FormField
+                        label={t('detailTitle')}
+                        htmlFor={`event-detail-title-${index}`}
+                      >
+                        <Input
+                          id={`event-detail-title-${index}`}
+                          placeholder={t('detailTitlePlaceholder')}
+                          {...form.register(`details.${index}.title`)}
+                        />
+                      </FormField>
+                      <FormField
+                        label={t('detailDescription')}
+                        htmlFor={`event-detail-description-${index}`}
+                      >
+                        <Textarea
+                          id={`event-detail-description-${index}`}
+                          className="!min-h-12"
+                          placeholder={t('detailDescriptionPlaceholder')}
+                          {...form.register(`details.${index}.description`)}
+                        />
+                      </FormField>
+                      <button
+                        type="button"
+                        className="mt-6 grid size-10 place-items-center rounded-lg text-muted-foreground hover:bg-danger/10 hover:text-danger"
+                        aria-label={t('removeDetail')}
+                        onClick={() => details.remove(index)}
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div className="sm:col-span-2">
                 <Button type="submit" loading={update.isPending}>
                   {t('save', { ns: 'common' })}
@@ -206,22 +301,20 @@ export function EventOverviewPage() {
                   {event.description ?? t('notProvided', { ns: 'common' })}
                 </p>
               </div>
-              {(event.venueAddress ||
-                event.venueDetails ||
-                event.restroomInformation ||
-                event.accessibilityInformation ||
-                event.parkingInformation ||
-                event.wifiInformation) && (
-                <div className="grid gap-3 rounded-lg bg-surface-sunken p-4 sm:col-span-2 sm:grid-cols-2">
-                  <VenueFact label={t('venueAddress')} value={event.venueAddress} />
-                  <VenueFact label={t('venueDetails')} value={event.venueDetails} />
-                  <VenueFact label={t('restroomInformation')} value={event.restroomInformation} />
-                  <VenueFact
-                    label={t('accessibilityInformation')}
-                    value={event.accessibilityInformation}
-                  />
-                  <VenueFact label={t('parkingInformation')} value={event.parkingInformation} />
-                  <VenueFact label={t('wifiInformation')} value={event.wifiInformation} />
+              {additionalDetails.length > 0 && (
+                <div className="sm:col-span-2">
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    {t('additionalDetails')}
+                  </p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {additionalDetails.map((detail, index) => (
+                      <VenueFact
+                        key={`${detail.title}-${index}`}
+                        label={detail.title}
+                        value={detail.description}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -306,4 +399,10 @@ function VenueFact({ label, value }: { label: string; value: string | null }) {
       <p className="mt-1 text-sm leading-6">{value}</p>
     </div>
   );
+}
+
+function formatFactTitle(value: string): string {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }

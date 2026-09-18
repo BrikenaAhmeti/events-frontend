@@ -321,13 +321,199 @@ describe('CreateEventPage platform administrator flow', () => {
     await userEvent.click(screen.getByRole('option', { name: 'Northstar Events' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
     expect(await screen.findByText('This is an unfinished conference.')).toBeInTheDocument();
-    expect(await screen.findByLabelText(/Event name/)).toHaveValue('Unfinished Conference');
+    expect(await screen.findByLabelText('Choose the event dates')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'New chat' }));
 
     expect(await screen.findByText('Starting a fresh event setup.')).toBeInTheDocument();
     expect(screen.queryByText('This is an unfinished conference.')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/Event name/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Choose the event dates')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Event information')).toBeEnabled();
+  });
+
+  it('offers a fillable brief when the client chooses the file workflow', async () => {
+    server.use(
+      http.get(`${api}/auth/me`, () =>
+        HttpResponse.json({
+          userId: 'platform-admin',
+          email: 'platform@example.test',
+          firstName: 'Platform',
+          lastName: 'Admin',
+          platformRole: 'SUPER_ADMIN',
+          memberships: [],
+        }),
+      ),
+      http.get(`${api}/events/directory/clients`, () =>
+        HttpResponse.json([
+          { id: 'client-a', name: 'Northstar Events', slug: 'northstar-events', status: 'ACTIVE' },
+        ]),
+      ),
+      http.post(`${api}/events/setup/start`, () =>
+        HttpResponse.json({
+          sessionId: 'setup-a',
+          clientId: 'client-a',
+          clientName: 'Northstar Events',
+          resumed: false,
+          messages: [
+            {
+              id: 'welcome-a',
+              role: 'CONCIERGE',
+              content: 'Choose a guided chat or a file template.',
+            },
+          ],
+          draft: {
+            event: {},
+            facts: [],
+            schedule: [],
+            suggestedName: '',
+            nameWasProvided: false,
+          },
+        }),
+      ),
+      http.post(`${api}/events/setup/analyze`, () =>
+        HttpResponse.json({
+          sessionId: 'setup-a',
+          message: 'Download the event brief template below.',
+          event: {},
+          suggestedName: '',
+          nameWasProvided: false,
+          completeness: {
+            score: 0,
+            ready: false,
+            missing: ['name'],
+            warnings: [],
+            recommendations: [],
+          },
+          facts: [],
+          schedule: [],
+          extractedFacts: 0,
+          extractedScheduleItems: 0,
+          file: null,
+          template: { kind: 'EVENT_BRIEF', fileName: 'feliam-event-brief-template.txt' },
+        }),
+      ),
+    );
+
+    renderApp(
+      <MemoryRouter initialEntries={['/app/events/new']}>
+        <CreateEventPage />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Client' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Northstar Events' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
+    await userEvent.click(await screen.findByRole('button', { name: /Use a file template/ }));
+
+    expect(await screen.findByText('Fillable event brief')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Download template' })).toBeInTheDocument();
+  });
+
+  it('shows the custom date and time step inside the setup conversation', async () => {
+    const setupRequests: FormData[] = [];
+    server.use(
+      http.get(`${api}/auth/me`, () =>
+        HttpResponse.json({
+          userId: 'platform-admin',
+          email: 'platform@example.test',
+          firstName: 'Platform',
+          lastName: 'Admin',
+          platformRole: 'SUPER_ADMIN',
+          memberships: [],
+        }),
+      ),
+      http.get(`${api}/events/directory/clients`, () =>
+        HttpResponse.json([
+          { id: 'client-a', name: 'Northstar Events', slug: 'northstar-events', status: 'ACTIVE' },
+        ]),
+      ),
+      http.post(`${api}/events/setup/start`, () =>
+        HttpResponse.json({
+          sessionId: 'setup-a',
+          clientId: 'client-a',
+          clientName: 'Northstar Events',
+          resumed: false,
+          messages: [
+            {
+              id: 'welcome-a',
+              role: 'CONCIERGE',
+              content: 'Start with the event name, description, and type.',
+            },
+          ],
+          draft: {
+            event: {},
+            facts: [],
+            schedule: [],
+            suggestedName: '',
+            nameWasProvided: false,
+          },
+        }),
+      ),
+      http.post(`${api}/events/setup/analyze`, async ({ request }) => {
+        setupRequests.push(await request.formData());
+        return HttpResponse.json({
+          sessionId: 'setup-a',
+          message:
+            setupRequests.length === 1
+              ? 'Choose the start and end date and time below.'
+              : 'Now add the location.',
+          event: {
+            name: 'Leadership Forum',
+            category: 'CONFERENCE',
+            description: 'An annual leadership forum for company directors.',
+          },
+          suggestedName: 'Leadership Forum',
+          nameWasProvided: true,
+          completeness: {
+            score: 33,
+            ready: false,
+            missing: ['location', 'startAt', 'endAt', 'timezone', 'organizerName', 'organizerEmail'],
+            warnings: [],
+            recommendations: [],
+          },
+          facts: [],
+          schedule: [],
+          extractedFacts: 0,
+          extractedScheduleItems: 0,
+          file: null,
+        });
+      }),
+    );
+
+    renderApp(
+      <MemoryRouter initialEntries={['/app/events/new']}>
+        <CreateEventPage />
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Client' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Northstar Events' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
+    const composer = screen.getByLabelText('Event information');
+    await userEvent.type(
+      composer,
+      'Leadership Forum, Annual gathering for regional directors, Conference',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    expect(await screen.findByLabelText('Choose the event dates')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Live event brief')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Start date and time' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Apply date and time' }));
+    await userEvent.click(screen.getByRole('button', { name: 'End date and time' }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Hour' }), '10');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply date and time' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Send dates' }));
+
+    await waitFor(() => expect(setupRequests).toHaveLength(2));
+    expect(setupRequests[1]?.get('text')).toEqual(
+      expect.stringContaining('Start date and time:'),
+    );
+    expect(setupRequests[1]?.get('text')).toEqual(expect.stringContaining('End date and time:'));
+    expect(setupRequests[1]?.get('text')).toEqual(expect.stringContaining('Timezone:'));
+    expect(setupRequests[1]?.get('startAt')).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
+    expect(setupRequests[1]?.get('endAt')).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
+    expect(setupRequests[1]?.get('timezone')).toBeTruthy();
   });
 });
