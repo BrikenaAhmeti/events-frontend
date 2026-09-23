@@ -1,6 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PencilLine, Plus, RefreshCw, UserRoundX, Users, X } from 'lucide-react';
+import {
+  PencilLine,
+  Plus,
+  RefreshCw,
+  Trash2,
+  UserRoundCheck,
+  UserRoundX,
+  Users,
+  X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -58,6 +67,7 @@ export function TeamPage() {
   const mayRead = Boolean(user && can(user, 'TEAM_READ', clientId));
   const [inviteOpen, setInviteOpen] = useState(false);
   const [disableTarget, setDisableTarget] = useState<TeamMember | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<TeamMember | null>(null);
   const [accessTarget, setAccessTarget] = useState<TeamMember | null>(null);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -73,6 +83,21 @@ export function TeamPage() {
       void queryClient.invalidateQueries({ queryKey: teamKeys.list(clientId) });
       showToast(t('disabled'));
       setDisableTarget(null);
+    },
+  });
+  const enable = useMutation({
+    mutationFn: (id: string) =>
+      apiClient.patch(`/clients/${clientId}/team/${id}`, { status: 'ACTIVE' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: teamKeys.list(clientId) });
+    },
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/clients/${clientId}/team/${id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: teamKeys.list(clientId) });
+      showToast(t('removed'));
+      setRemoveTarget(null);
     },
   });
   const resend = useMutation({
@@ -154,9 +179,25 @@ export function TeamPage() {
                       {t('resend')}
                     </Button>
                   )}
-                  <Button size="sm" variant="quiet" onClick={() => setDisableTarget(member)}>
-                    <UserRoundX className="size-4" />
-                    {t('disable')}
+                  {member.status === 'DISABLED' ? (
+                    <Button
+                      size="sm"
+                      variant="quiet"
+                      loading={enable.isPending && enable.variables === member.id}
+                      onClick={() => enable.mutate(member.id)}
+                    >
+                      <UserRoundCheck className="size-4" />
+                      {t('enable')}
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="quiet" onClick={() => setDisableTarget(member)}>
+                      <UserRoundX className="size-4" />
+                      {t('disable')}
+                    </Button>
+                  )}
+                  <Button size="sm" variant="quiet" onClick={() => setRemoveTarget(member)}>
+                    <Trash2 className="size-4" />
+                    {t('remove')}
                   </Button>
                 </div>
               ) : (
@@ -196,6 +237,17 @@ export function TeamPage() {
         tone="danger"
         onClose={() => setDisableTarget(null)}
         onConfirm={() => disableTarget && disable.mutate(disableTarget.id)}
+      />
+      <ConfirmDialog
+        open={Boolean(removeTarget)}
+        title={t('removeTitle')}
+        description={t('removeDescription', {
+          name: removeTarget?.user.firstName ?? t('thisPerson'),
+        })}
+        confirmLabel={t('remove')}
+        tone="danger"
+        onClose={() => setRemoveTarget(null)}
+        onConfirm={() => removeTarget && remove.mutate(removeTarget.id)}
       />
     </div>
   );
