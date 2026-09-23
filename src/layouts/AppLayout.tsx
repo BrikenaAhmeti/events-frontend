@@ -7,6 +7,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  ScrollText,
   UserRound,
   Users,
   X,
@@ -49,6 +50,16 @@ function Navigation({ close, compact = false }: { close?: () => void; compact?: 
           label: t('team'),
           icon: Users,
           show: user.platformRole !== 'SUPER_ADMIN' && can(user, 'TEAM_READ', clientId),
+        },
+        {
+          to: '/app/activity',
+          label: t('activity'),
+          icon: ScrollText,
+          show:
+            user.platformRole === 'SUPER_ADMIN' ||
+            user.memberships.some(
+              ({ role, status }) => role === 'CLIENT_ADMIN' && status === 'ACTIVE',
+            ),
         },
       ]
     : [];

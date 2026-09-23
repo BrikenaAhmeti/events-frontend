@@ -96,6 +96,32 @@ export type Client = {
 
 export type Page<T> = { items: T[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } };
 
+export type AuditLogEntry = {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  requestId: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  actor: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  } | null;
+  client: { id: string; name: string } | null;
+  event: { id: string; name: string } | null;
+};
+
+export type AuditActor = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: 'CLIENT_ADMIN' | 'CLIENT_STAFF';
+};
+
 export type ApiErrorShape = {
   statusCode: number;
   code: string;

@@ -13,6 +13,13 @@ export const eventKeys = {
   list: (filters?: Record<string, string>) => [...eventKeys.all, 'list', filters] as const,
   detail: (id: string) => [...eventKeys.all, id] as const,
 };
+export const auditKeys = {
+  all: ['audit-logs'] as const,
+  list: (filters?: Record<string, string>) => [...auditKeys.all, 'list', filters] as const,
+  clients: () => [...auditKeys.all, 'clients'] as const,
+  actors: (clientId: string) => [...auditKeys.all, 'actors', clientId] as const,
+  actions: (clientId: string) => [...auditKeys.all, 'actions', clientId] as const,
+};
 export const guestKeys = {
   all: ['guests'] as const,
   list: (eventId: string) => [...guestKeys.all, eventId] as const,

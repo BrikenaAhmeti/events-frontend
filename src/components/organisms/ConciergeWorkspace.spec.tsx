@@ -113,4 +113,44 @@ describe('ConciergeWorkspace', () => {
     expect(screen.getByText('https://events.example.test/e/leadership-forum')).toBeInTheDocument();
     expect(screen.getByAltText('Guest access QR code')).toBeInTheDocument();
   });
+
+  it('continues from ready details through guest chat and publishes in the conversation', async () => {
+    const extract = vi.fn(() =>
+      HttpResponse.json({
+        applied: true,
+        addedGuests: 2,
+        message: { id: 'added-guests', content: 'Added 2 guests. Continue to publishing.' },
+        completeness: { ready: true, missing: [] },
+      }),
+    );
+    const publish = vi.fn(() => HttpResponse.json({ status: 'PUBLISHED' }));
+    server.use(
+      http.get('http://localhost:3000/api/v1/events/event-a/concierge/messages', () =>
+        HttpResponse.json({ id: null, messages: [] }),
+      ),
+      http.post('http://localhost:3000/api/v1/events/event-a/concierge/extract', extract),
+      http.post('http://localhost:3000/api/v1/events/event-a/publish', publish),
+    );
+    renderApp(
+      <ConciergeWorkspace
+        eventId="event-a"
+        eventStatus="READY"
+        ready
+        allowPlanning
+        allowGuestManage
+        allowPublish
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    expect(screen.getByText(/Send guest names and email addresses here/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Write a message…'), 'Alex Morgan, alex@example.com; Sam Lee, sam@example.com');
+    await user.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(await screen.findByText('Added 2 guests. Continue to publishing.')).toBeInTheDocument();
+    expect(extract).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole('button', { name: 'Continue to publish' }));
+    await user.click(screen.getByRole('button', { name: 'Publish event' }));
+    expect(publish).toHaveBeenCalledOnce();
+    expect(await screen.findByText(/Event published/)).toBeInTheDocument();
+  });
 });

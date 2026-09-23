@@ -35,6 +35,7 @@ describe('AppLayout role navigation', () => {
     renderFor({ ...baseUser, platformRole: 'SUPER_ADMIN' });
     expect(await screen.findByRole('link', { name: 'Clients' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Events' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Activity' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Team' })).not.toBeInTheDocument();
   });
 
@@ -52,6 +53,7 @@ describe('AppLayout role navigation', () => {
     });
     expect(await screen.findByRole('link', { name: 'Events' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Team' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Activity' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Clients' })).not.toBeInTheDocument();
   });
 
@@ -70,6 +72,7 @@ describe('AppLayout role navigation', () => {
     expect(await screen.findByRole('link', { name: 'Events' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Team' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Clients' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Activity' })).not.toBeInTheDocument();
   });
 
   it('collapses to clickable icons and keeps the selected page visually distinct', async () => {

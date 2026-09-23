@@ -6,7 +6,7 @@ import { Button } from '../atoms/Button';
 import { Textarea } from '../atoms/Input';
 import { AssistantMessage, TypingIndicator, UserMessage } from '../molecules/ChatMessage';
 import { apiClient } from '../../lib/api/api-client';
-import { documentKeys, eventKeys } from '../../lib/api/query-keys';
+import { documentKeys, eventKeys, guestKeys, invitationKeys } from '../../lib/api/query-keys';
 import { useEventSocket } from '../../lib/websocket/use-event-socket';
 
 type Message = { id: string; role: 'USER' | 'CONCIERGE'; content: string; failed?: boolean };
@@ -16,22 +16,36 @@ type ConciergeStreamEvent =
   | { type: 'message'; message: Message }
   | { type: 'error'; messageId: string; message: string };
 
+const isQuestion = (content: string) =>
+  (/\?\s*$/.test(content) || /^(what|when|where|who|how|why|is|are|can|could|do|does|tell me|show me)\b/i.test(content)) &&
+  !/\b(add|update|change|set|remove|invite|register|save|correct|replace)\b/i.test(content);
+
 export function ConciergeWorkspace({
   eventId,
   guest = false,
   allowPlanning = false,
+  allowGuestManage = false,
+  allowPublish = false,
   allowUpload = false,
+  eventStatus,
+  ready = false,
+  guestCount = 0,
   shareAccess,
 }: {
   eventId: string;
   guest?: boolean;
   allowPlanning?: boolean;
+  allowGuestManage?: boolean;
+  allowPublish?: boolean;
   allowUpload?: boolean;
+  eventStatus?: 'DRAFT' | 'READY' | 'PUBLISHED' | 'CANCELLED' | 'ARCHIVED';
+  ready?: boolean;
+  guestCount?: number;
   shareAccess?: { url: string; qrSvg: string };
 }) {
   const { t } = useTranslation('concierge');
   const [message, setMessage] = useState('');
-  const [mode, setMode] = useState<'plan' | 'ask'>(guest || !allowPlanning ? 'ask' : 'plan');
+  const [step, setStep] = useState<'details' | 'guests' | 'publish'>('details');
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasStreamingText, setHasStreamingText] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -106,14 +120,8 @@ export function ConciergeWorkspace({
   );
   const socket = useEventSocket(eventId, socketEvent, !guest);
   const send = useMutation({
-    mutationFn: async ({
-      content,
-      selectedMode,
-    }: {
-      content: string;
-      selectedMode: 'plan' | 'ask';
-    }) => {
-      if (selectedMode === 'plan')
+    mutationFn: async (content: string) => {
+      if (!guest && allowPlanning && !isQuestion(content))
         return apiClient.post<{
           applied: boolean;
           message?: { id: string; content: string };
@@ -126,7 +134,7 @@ export function ConciergeWorkspace({
       );
       return { streamed: true as const };
     },
-    onSuccess: (result, variables) => {
+    onSuccess: (result) => {
       if ('applied' in result) {
         setMessages((current) => [
           ...current,
@@ -137,21 +145,31 @@ export function ConciergeWorkspace({
           },
         ]);
         void queryClient.invalidateQueries({ queryKey: eventKeys.detail(eventId) });
+        void queryClient.invalidateQueries({ queryKey: guestKeys.list(eventId) });
       }
-      if (
-        variables.selectedMode === 'plan' &&
-        'completeness' in result &&
-        result.completeness?.ready
-      )
-        setMode('ask');
     },
-    onError: () => {
+    onError: (error, content) => {
       setHasStreamingText(false);
       if (streamErrorShown.current) return;
       setMessages((current) => [
         ...current,
-        { id: crypto.randomUUID(), role: 'CONCIERGE', content: t('failed'), failed: true },
+        {
+          id: crypto.randomUUID(),
+          role: 'CONCIERGE',
+          content: !guest && allowPlanning && !isQuestion(content) ? error.message || t('failed') : t('failed'),
+          failed: true,
+        },
       ]);
+    },
+  });
+  const publish = useMutation({
+    mutationFn: () => apiClient.post(`/events/${eventId}/publish`),
+    onSuccess: () => {
+      setMessages((current) => [...current, {
+        id: crypto.randomUUID(), role: 'CONCIERGE', content: t('publishedInChat'),
+      }]);
+      void queryClient.invalidateQueries({ queryKey: eventKeys.all });
+      void queryClient.invalidateQueries({ queryKey: invitationKeys.access(eventId) });
     },
   });
   const upload = useMutation({
@@ -171,15 +189,15 @@ export function ConciergeWorkspace({
   useEffect(() => {
     const chatLog = chatLogRef.current;
     if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
-  }, [messages, send.isPending, shareAccess, upload.isPending]);
+  }, [messages, send.isPending, shareAccess, step, upload.isPending]);
   const submit = () => {
     const content = message.trim();
-    if (!content || send.isPending) return;
+    if (!content || send.isPending || publish.isPending) return;
     streamErrorShown.current = false;
     setHasStreamingText(false);
     setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'USER', content }]);
     setMessage('');
-    send.mutate({ content, selectedMode: mode });
+    send.mutate(content);
   };
   return (
     <section
@@ -207,30 +225,6 @@ export function ConciergeWorkspace({
             </span>
           )}
         </div>
-        {!guest && allowPlanning && (
-          <div
-            className="mt-3 inline-flex rounded-lg border border-border bg-surface p-1"
-            role="group"
-            aria-label={t('mode')}
-          >
-            <button
-              type="button"
-              className={`min-h-9 rounded-md px-3 text-sm font-semibold ${mode === 'plan' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
-              onClick={() => setMode('plan')}
-              disabled={send.isPending}
-            >
-              {t('addDetails')}
-            </button>
-            <button
-              type="button"
-              className={`min-h-9 rounded-md px-3 text-sm font-semibold ${mode === 'ask' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
-              onClick={() => setMode('ask')}
-              disabled={send.isPending}
-            >
-              {t('askQuestion')}
-            </button>
-          </div>
-        )}
       </header>
       <div
         ref={chatLogRef}
@@ -298,6 +292,40 @@ export function ConciergeWorkspace({
         )}
         {send.isPending && !hasStreamingText && <TypingIndicator label={t('processing')} />}
         {upload.isPending && <TypingIndicator label={t('uploading')} />}
+        {!guest && eventStatus === 'READY' && ready && allowPlanning && !history.isLoading && !publish.isSuccess && (
+          <AssistantMessage wide>
+            <div className="space-y-3 text-sm leading-6">
+              {step === 'details' && (
+                <>
+                  <p>{t('detailsReadyContinue')}</p>
+                  <Button type="button" onClick={() => setStep('guests')}>
+                    {t('continue')}
+                  </Button>
+                </>
+              )}
+              {step === 'guests' && (
+                <>
+                  <p>{allowGuestManage ? t('guestChatPrompt') : t('guestPermissionPrompt')}</p>
+                  <p className="font-semibold">{t('guestCount', { count: guestCount })}</p>
+                  <Button type="button" onClick={() => setStep('publish')}>
+                    {t('continueToPublish')}
+                  </Button>
+                </>
+              )}
+              {step === 'publish' && (
+                <>
+                  <p>{t('publishChatPrompt', { count: guestCount })}</p>
+                  {publish.error && <p role="alert" className="text-danger">{publish.error.message}</p>}
+                  {allowPublish ? (
+                    <Button type="button" loading={publish.isPending} onClick={() => publish.mutate()}>
+                      {t('publishEvent')}
+                    </Button>
+                  ) : <p>{t('publishPermissionPrompt')}</p>}
+                </>
+              )}
+            </div>
+          </AssistantMessage>
+        )}
         {shareAccess && (
           <AssistantMessage wide>
             <div className="w-full max-w-xl">
@@ -374,7 +402,7 @@ export function ConciergeWorkspace({
             rows={1}
             placeholder={t('placeholder')}
             maxLength={4_000}
-            disabled={send.isPending}
+            disabled={send.isPending || publish.isPending}
           />
           <div className="flex items-center gap-2 border-t border-border/70 px-1 pt-2">
             {!guest && allowUpload ? (
@@ -412,7 +440,7 @@ export function ConciergeWorkspace({
               type="submit"
               size="sm"
               className="size-10 min-h-10 shrink-0 rounded-full px-0"
-              disabled={!message.trim() || send.isPending}
+              disabled={!message.trim() || send.isPending || publish.isPending}
               aria-label={t('send')}
               title={t('send')}
             >

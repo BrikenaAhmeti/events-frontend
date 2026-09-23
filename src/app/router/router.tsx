@@ -24,6 +24,7 @@ const ClientDetailPage = load(
   'ClientDetailPage',
 );
 const TeamPage = load(() => import('../../pages/team/TeamPage'), 'TeamPage');
+const ActivityPage = load(() => import('../../pages/activity/ActivityPage'), 'ActivityPage');
 const EventsPage = load(() => import('../../pages/events/EventsPage'), 'EventsPage');
 const CreateEventPage = load(() => import('../../pages/events/CreateEventPage'), 'CreateEventPage');
 const EventLayout = load(() => import('../../pages/events/EventLayout'), 'EventLayout');
@@ -82,6 +83,7 @@ export const router = createBrowserRouter([
               { path: 'clients', element: suspense(<ClientsPage />) },
               { path: 'clients/:clientId', element: suspense(<ClientDetailPage />) },
               { path: 'team', element: suspense(<TeamPage />) },
+              { path: 'activity', element: suspense(<ActivityPage />) },
               { path: 'events', element: suspense(<EventsPage />) },
               { path: 'events/new', element: suspense(<CreateEventPage />) },
               {

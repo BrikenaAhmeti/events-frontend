@@ -358,7 +358,7 @@ describe('CreateEventPage platform administrator flow', () => {
             {
               id: 'welcome-a',
               role: 'CONCIERGE',
-              content: 'Choose a guided chat or a file template.',
+              content: 'Tell me what you know about the event. You can add guests here too.',
             },
           ],
           draft: {
@@ -389,7 +389,7 @@ describe('CreateEventPage platform administrator flow', () => {
           extractedFacts: 0,
           extractedScheduleItems: 0,
           file: null,
-          template: { kind: 'EVENT_BRIEF', fileName: 'feliam-event-brief-template.txt' },
+          template: { kind: 'EVENT_BRIEF', fileName: 'feliam-event-brief-template.docx' },
         }),
       ),
     );
@@ -403,10 +403,18 @@ describe('CreateEventPage platform administrator flow', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Client' }));
     await userEvent.click(screen.getByRole('option', { name: 'Northstar Events' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
-    await userEvent.click(await screen.findByRole('button', { name: /Use a file template/ }));
+    expect(screen.queryByRole('button', { name: /Guide me step by step/ })).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Event information'), 'template');
+    await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     expect(await screen.findByText('Fillable event brief')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Download template' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Download Word document template' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Download Excel workbook template' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Download Plain text template' })).toBeInTheDocument();
   });
 
   it('shows the custom date and time step inside the setup conversation', async () => {

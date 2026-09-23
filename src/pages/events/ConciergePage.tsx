@@ -24,7 +24,12 @@ export function ConciergePage() {
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <ConciergeWorkspace
         eventId={event.id}
-        allowPlanning={Boolean(user && event.capabilities.canEdit)}
+        eventStatus={event.status}
+        ready={event.completeness.ready}
+        guestCount={event._count.guests}
+        allowPlanning={Boolean(user && event.capabilities.canEdit && can(user, 'EVENT_EDIT', event.clientId))}
+        allowGuestManage={Boolean(user && event.capabilities.canEdit && can(user, 'GUEST_MANAGE', event.clientId))}
+        allowPublish={Boolean(user && event.capabilities.canEdit && can(user, 'EVENT_PUBLISH', event.clientId))}
         allowUpload={Boolean(
           user && event.capabilities.canEdit && can(user, 'DOCUMENT_UPLOAD', event.clientId),
         )}

@@ -3,7 +3,9 @@ import {
   CalendarDays,
   Check,
   Download,
+  FileSpreadsheet,
   FileText,
+  FileType2,
   MapPin,
   MessageSquarePlus,
   Paperclip,
@@ -28,6 +30,10 @@ import { DateTimePicker } from '../../components/molecules/DateTimePicker';
 import { activeClientId, can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
 import { CompletenessPanel } from '../../features/events/CompletenessPanel';
+import {
+  downloadEventBriefTemplate,
+  type EventBriefTemplateFormat,
+} from '../../features/events/event-brief-templates';
 import { apiClient } from '../../lib/api/api-client';
 import { clientKeys } from '../../lib/api/query-keys';
 import type { Client, EventCompleteness, EventSummary, Page } from '../../types/domain';
@@ -67,6 +73,7 @@ type SetupAnalysis = {
     location?: string;
     category?: string;
   }>;
+  guests: Array<{ fullName: string; email: string; company?: string; guestGroup?: string }>;
   extractedFacts: number;
   extractedScheduleItems: number;
   file: { name: string; size: number } | null;
@@ -93,6 +100,7 @@ type SetupStart = {
     event: Partial<Draft>;
     facts: SetupAnalysis['facts'];
     schedule: SetupAnalysis['schedule'];
+    guests: SetupAnalysis['guests'];
     suggestedName: string;
     nameWasProvided: boolean;
   };
@@ -193,8 +201,8 @@ export function CreateEventPage() {
   const [selectedClientMessage, setSelectedClientMessage] = useState('');
   const [conversation, setConversation] = useState<SetupConversationMessage[]>([]);
   const [analyzedContent, setAnalyzedContent] = useState<
-    Pick<SetupAnalysis, 'facts' | 'schedule' | 'extractedFacts' | 'extractedScheduleItems'>
-  >({ facts: [], schedule: [], extractedFacts: 0, extractedScheduleItems: 0 });
+    Pick<SetupAnalysis, 'facts' | 'schedule' | 'guests' | 'extractedFacts' | 'extractedScheduleItems'>
+  >({ facts: [], schedule: [], guests: [], extractedFacts: 0, extractedScheduleItems: 0 });
   const isSuperAdmin = user?.platformRole === 'SUPER_ADMIN';
   const clientId = user ? (isSuperAdmin ? confirmedClientId : defaultClient) : '';
   const setupReady = Boolean(clientId && sessionId);
@@ -237,6 +245,7 @@ export function CreateEventPage() {
       setAnalyzedContent({
         facts: restored.facts ?? [],
         schedule: restored.schedule ?? [],
+        guests: restored.guests ?? [],
         extractedFacts: restored.facts?.length ?? 0,
         extractedScheduleItems: restored.schedule?.length ?? 0,
       });
@@ -283,6 +292,7 @@ export function CreateEventPage() {
       setAnalyzedContent({
         facts: result.facts ?? [],
         schedule: result.schedule ?? [],
+        guests: result.guests ?? [],
         extractedFacts: result.extractedFacts,
         extractedScheduleItems: result.extractedScheduleItems,
       });
@@ -333,6 +343,7 @@ export function CreateEventPage() {
     setAnalyzedContent({
       facts: [],
       schedule: [],
+      guests: [],
       extractedFacts: 0,
       extractedScheduleItems: 0,
     });
@@ -349,10 +360,6 @@ export function CreateEventPage() {
       text,
       file,
     });
-  };
-  const sendChoice = (text: string) => {
-    if (!setupReady || analyze.isPending) return;
-    analyze.mutate({ text, file: null });
   };
   const sendDates = (startAt: string, endAt: string, timezone: string) => {
     if (!setupReady || analyze.isPending) return;
@@ -482,41 +489,6 @@ export function CreateEventPage() {
               </UserChatBubble>
             ),
           )}
-          {setupReady &&
-            !reviewed &&
-            !conversation.some((message) => message.role === 'user') &&
-            !analyze.isPending && (
-              <ChatBubble wide>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    className="group rounded-xl border border-border bg-surface p-4 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
-                    onClick={() => sendChoice(t('stepByStepChoiceMessage'))}
-                  >
-                    <span className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground">
-                      <MessageSquarePlus className="size-5" />
-                    </span>
-                    <span className="mt-3 block font-semibold">{t('stepByStepChoice')}</span>
-                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-                      {t('stepByStepChoiceDescription')}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="group rounded-xl border border-border bg-surface p-4 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
-                    onClick={() => sendChoice(t('fileTemplateChoiceMessage'))}
-                  >
-                    <span className="grid size-10 place-items-center rounded-xl bg-accent text-accent-foreground">
-                      <FileText className="size-5" />
-                    </span>
-                    <span className="mt-3 block font-semibold">{t('fileTemplateChoice')}</span>
-                    <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-                      {t('fileTemplateChoiceDescription')}
-                    </span>
-                  </button>
-                </div>
-              </ChatBubble>
-            )}
           {analyze.isPending && <TypingBubble label={t('reviewingEventInformation')} />}
           {analyze.error && <ChatBubble danger>{analyze.error.message}</ChatBubble>}
           {reviewed && guidedStep === 'dates' && !analyze.isPending && (
@@ -536,6 +508,7 @@ export function CreateEventPage() {
                 completeness={draftCompleteness}
                 facts={analyzedContent.extractedFacts}
                 schedule={analyzedContent.extractedScheduleItems}
+                guests={analyzedContent.guests.length}
                 createError={create.error?.message}
                 createPending={create.isPending}
                 canSubmit={canSubmit}
@@ -716,6 +689,7 @@ function EventDraftSummary({
   completeness,
   facts,
   schedule,
+  guests,
   createError,
   createPending,
   canSubmit,
@@ -725,6 +699,7 @@ function EventDraftSummary({
   completeness: EventCompleteness;
   facts: number;
   schedule: number;
+  guests: number;
   createError?: string;
   createPending: boolean;
   canSubmit: boolean;
@@ -789,6 +764,9 @@ function EventDraftSummary({
         <span className="rounded-full border border-border px-3 py-1.5">
           {t('scheduleItemCount', { count: schedule })}
         </span>
+        <span className="rounded-full border border-border px-3 py-1.5">
+          {t('chatGuestCount', { count: guests })}
+        </span>
       </div>
       <div className="mt-5">
         <CompletenessPanel completeness={completeness} />
@@ -828,6 +806,46 @@ function SummaryItem({
 
 function EventBriefTemplateCard() {
   const { t } = useTranslation('events');
+  const [downloading, setDownloading] = useState<EventBriefTemplateFormat | null>(null);
+  const [downloadError, setDownloadError] = useState(false);
+  const download = async (format: EventBriefTemplateFormat) => {
+    setDownloading(format);
+    setDownloadError(false);
+    try {
+      await downloadEventBriefTemplate(format);
+    } catch {
+      setDownloadError(true);
+    } finally {
+      setDownloading(null);
+    }
+  };
+  const formats: Array<{
+    format: EventBriefTemplateFormat;
+    icon: typeof FileText;
+    title: string;
+    description: string;
+    recommended?: boolean;
+  }> = [
+    {
+      format: 'docx',
+      icon: FileType2,
+      title: t('wordTemplate'),
+      description: t('wordTemplateDescription'),
+      recommended: true,
+    },
+    {
+      format: 'xlsx',
+      icon: FileSpreadsheet,
+      title: t('excelTemplate'),
+      description: t('excelTemplateDescription'),
+    },
+    {
+      format: 'txt',
+      icon: FileText,
+      title: t('textTemplate'),
+      description: t('textTemplateDescription'),
+    },
+  ];
   return (
     <div className="mt-4 overflow-hidden rounded-xl border border-primary/20 bg-primary/5">
       <div className="flex items-start gap-3 p-4">
@@ -841,57 +859,38 @@ function EventBriefTemplateCard() {
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-primary/15 bg-surface/60 px-4 py-3">
-        <span className="text-xs font-medium text-muted-foreground">
-          feliam-event-brief-template.txt
-        </span>
-        <Button size="sm" onClick={downloadEventBriefTemplate}>
-          <Download className="size-4" />
-          {t('downloadTemplate')}
-        </Button>
+      <div className="grid gap-3 border-t border-primary/15 bg-surface/60 p-4 sm:grid-cols-3">
+        {formats.map(({ format, icon: Icon, title, description, recommended }) => (
+          <button
+            key={format}
+            type="button"
+            className={`relative rounded-xl border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-md ${recommended ? 'border-primary/45 bg-primary/5' : 'border-border bg-surface'}`}
+            disabled={downloading !== null}
+            aria-label={t('downloadTemplateFormat', { format: title })}
+            onClick={() => void download(format)}
+          >
+            {recommended && (
+              <span className="absolute right-2 top-2 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary-foreground">
+                {t('recommended')}
+              </span>
+            )}
+            <span className="grid size-9 place-items-center rounded-lg bg-muted text-primary">
+              <Icon className="size-4.5" />
+            </span>
+            <span className="mt-3 block text-sm font-semibold">{title}</span>
+            <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+              {description}
+            </span>
+            <span className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-primary">
+              <Download className="size-3.5" />
+              {downloading === format ? t('preparingDownload') : t('download')}
+            </span>
+          </button>
+        ))}
       </div>
+      {downloadError && <p className="px-4 pb-4 text-sm text-danger">{t('templateDownloadError')}</p>}
     </div>
   );
-}
-
-function downloadEventBriefTemplate() {
-  const content = `FELIAM EVENT BRIEF
-
-Fill in what you know and leave anything else blank. Save this file, then attach it in the event setup chat.
-
-EVENT BASICS
-Event name:
-Event type or purpose:
-Description:
-Destination or city:
-Venue:
-Venue address:
-Start date and time:
-End date and time:
-Timezone, for example Europe/Madrid:
-Organizer name:
-Organizer email:
-
-SCHEDULE
-Add one activity per line using: Date | Start time | End time | Activity | Location
-
-
-ADDITIONAL EVENT DETAILS
-Add any details that matter for this event using: Title | Description
-Examples: Dress code | Business casual
-Examples: Shuttle pickup | Hotel lobby at 08:30
-Examples: Accessibility | Step-free entrance is on the east side
-Examples: Wi-Fi | Network and access instructions will be shared at check-in
-
-`;
-  const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'feliam-event-brief-template.txt';
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
 }
 
 function formatDraftDate(value: string): string {
