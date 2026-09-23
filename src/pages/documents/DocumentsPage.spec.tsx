@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HttpResponse, http } from 'msw';
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
@@ -36,7 +36,7 @@ const event: EventDetail = {
     lastName: 'Reed',
     email: 'staff@example.test',
   },
-  capabilities: { canEdit: true, canDelete: true, canCancel: true },
+  capabilities: { canEdit: false, canUploadDocuments: true, canDelete: false, canCancel: false },
   completeness: { score: 100, ready: true, missing: [], warnings: [], recommendations: [] },
   _count: { guests: 0, documents: 0, invitations: 0 },
   schedule: [],
@@ -88,6 +88,7 @@ describe('DocumentsPage', () => {
     );
     const input = rendered.container.querySelector('input[type="file"]');
     expect(input).toBeInstanceOf(HTMLInputElement);
+    await waitFor(() => expect(input).toBeEnabled());
     await userEvent.upload(input as HTMLInputElement, new File(['agenda'], 'agenda.txt'));
     expect(
       await screen.findByText('Document uploaded and queued for processing.'),

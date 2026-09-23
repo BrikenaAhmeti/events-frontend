@@ -9,6 +9,32 @@ import { CreateEventPage } from './CreateEventPage';
 const api = 'http://localhost:3000/api/v1';
 
 describe('CreateEventPage platform administrator flow', () => {
+  it('keeps setup usable when a successful response omits messages and draft', async () => {
+    server.use(
+      http.get(`${api}/auth/me`, () => HttpResponse.json({
+        userId: 'platform-admin', email: 'platform@example.test',
+        firstName: 'Platform', lastName: 'Admin', platformRole: 'SUPER_ADMIN', memberships: [],
+      })),
+      http.get(`${api}/events/directory/clients`, () => HttpResponse.json([
+        { id: 'client-a', name: 'Northstar Events', slug: 'northstar-events', status: 'ACTIVE' },
+      ])),
+      http.post(`${api}/events/setup/start`, () => HttpResponse.json({
+        sessionId: 'setup-a', clientId: 'client-a', clientName: 'Northstar Events',
+        resumed: false, message: 'Tell me about your event.',
+      }, { status: 201 })),
+    );
+
+    renderApp(<MemoryRouter initialEntries={['/app/events/new']}><CreateEventPage /></MemoryRouter>);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Client' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Northstar Events' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
+
+    expect(await screen.findByText('Tell me about your event.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Event information')).toBeEnabled();
+    expect(screen.queryByText("Cannot read properties of undefined (reading 'map')")).not.toBeInTheDocument();
+  });
+
   it('keeps a document-based event in chat until extracted details are confirmed', async () => {
     const readyEvent = {
       name: 'Leadership Forum', category: 'CONFERENCE',

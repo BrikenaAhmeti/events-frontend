@@ -31,7 +31,8 @@ export function ConciergePage() {
         allowGuestManage={Boolean(user && event.capabilities.canEdit && can(user, 'GUEST_MANAGE', event.clientId))}
         allowPublish={Boolean(user && event.capabilities.canEdit && can(user, 'EVENT_PUBLISH', event.clientId))}
         allowUpload={Boolean(
-          user && event.capabilities.canEdit && can(user, 'DOCUMENT_UPLOAD', event.clientId),
+          user && can(user, 'DOCUMENT_UPLOAD', event.clientId) &&
+          (event.capabilities.canUploadDocuments ?? event.capabilities.canEdit),
         )}
         shareAccess={access.data}
       />

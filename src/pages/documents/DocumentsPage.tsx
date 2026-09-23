@@ -29,8 +29,10 @@ export function DocumentsPage() {
   const { t } = useTranslation('documents');
   const { data: user } = useCurrentUser();
   const mayUpload = Boolean(
-    user && event.capabilities.canEdit && can(user, 'DOCUMENT_UPLOAD', event.clientId),
+    user && can(user, 'DOCUMENT_UPLOAD', event.clientId) &&
+    (event.capabilities.canUploadDocuments ?? event.capabilities.canEdit),
   );
+  const changesClosed = event.status === 'CANCELLED' || event.status === 'ARCHIVED';
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const input = useRef<HTMLInputElement>(null);
@@ -69,6 +71,7 @@ export function DocumentsPage() {
           type="file"
           accept=".pdf,.docx,.txt,.csv,.xlsx"
           className="sr-only"
+          disabled={!mayUpload}
           onChange={(event) => {
             choose(event.target.files);
             event.target.value = '';
@@ -86,7 +89,7 @@ export function DocumentsPage() {
           onDrop={(event) => {
             event.preventDefault();
             setDragging(false);
-            choose(event.dataTransfer.files);
+            if (mayUpload) choose(event.dataTransfer.files);
           }}
           disabled={!mayUpload}
           className={`grid min-h-52 w-full place-items-center rounded-2xl border border-dashed p-8 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-65 ${dragging ? 'border-primary bg-primary/5' : 'border-input bg-surface hover:border-primary/60'}`}
@@ -96,7 +99,13 @@ export function DocumentsPage() {
               <UploadCloud className="size-5" />
             </span>
             <span className="mt-4 block font-semibold">
-              {upload.isPending ? t('uploading') : mayUpload ? t('drop') : t('permissionRequired')}
+              {upload.isPending
+                ? t('uploading')
+                : mayUpload
+                  ? t('drop')
+                  : changesClosed
+                    ? t('eventClosed')
+                    : t('permissionRequired')}
             </span>
             <span className="mt-2 block text-sm text-muted-foreground">{t('formats')}</span>
           </span>
