@@ -9,6 +9,56 @@ import { CreateEventPage } from './CreateEventPage';
 const api = 'http://localhost:3000/api/v1';
 
 describe('CreateEventPage platform administrator flow', () => {
+  it('keeps a document-based event in chat until extracted details are confirmed', async () => {
+    const readyEvent = {
+      name: 'Leadership Forum', category: 'CONFERENCE',
+      description: 'A leadership forum.', destination: 'Lisbon',
+      startAt: '2027-10-12T08:00:00.000Z', endAt: '2027-10-12T18:00:00.000Z',
+      timezone: 'Europe/Lisbon', organizerName: 'Morgan Reed',
+      organizerEmail: 'morgan@example.test',
+    };
+    const texts: string[] = [];
+    server.use(
+      http.get(`${api}/auth/me`, () => HttpResponse.json({
+        userId: 'platform-admin', email: 'platform@example.test',
+        firstName: 'Platform', lastName: 'Admin', platformRole: 'SUPER_ADMIN', memberships: [],
+      })),
+      http.get(`${api}/events/directory/clients`, () => HttpResponse.json([
+        { id: 'client-a', name: 'Northstar Events', slug: 'northstar-events', status: 'ACTIVE' },
+      ])),
+      http.post(`${api}/events/setup/start`, () => HttpResponse.json({
+        sessionId: 'setup-a', clientId: 'client-a', clientName: 'Northstar Events', resumed: true,
+        messages: [
+          { id: 'user-a', role: 'USER', content: 'Attached event file: different-layout.pdf' },
+          { id: 'assistant-a', role: 'CONCIERGE', content: 'Current draft event details to confirm.' },
+        ],
+        draft: { event: readyEvent, facts: [], schedule: [], guests: [],
+          suggestedName: 'Leadership Forum', nameWasProvided: true, documentReviewPending: true },
+      })),
+      http.post(`${api}/events/setup/analyze`, async ({ request }) => {
+        const value = (await request.formData()).get('text');
+        if (typeof value === 'string') texts.push(value);
+        return HttpResponse.json({
+          sessionId: 'setup-a', message: 'Thanks, I’ll use those confirmed details.',
+          event: readyEvent, suggestedName: 'Leadership Forum', nameWasProvided: true,
+          documentReviewPending: false, facts: [], schedule: [], guests: [],
+          extractedFacts: 0, extractedScheduleItems: 0, file: null,
+        });
+      }),
+    );
+
+    renderApp(<MemoryRouter initialEntries={['/app/events/new']}><CreateEventPage /></MemoryRouter>);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Client' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Northstar Events' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
+    const confirm = await screen.findByRole('button', { name: 'Confirm extracted details' });
+    expect(screen.queryByRole('button', { name: 'Create event workspace' })).not.toBeInTheDocument();
+    await userEvent.click(confirm);
+    await waitFor(() => expect(texts).toEqual(['Confirm details']));
+    expect(await screen.findByRole('button', { name: 'Create event workspace' })).toBeInTheDocument();
+  });
+
   it('creates an event on behalf of the selected client', async () => {
     let createdEvent: Record<string, unknown> | undefined;
     const setupRequests: FormData[] = [];
@@ -138,6 +188,8 @@ describe('CreateEventPage platform administrator flow', () => {
         setupSessionId: 'setup-a',
         name: 'Leadership Forum',
         category: 'CONFERENCE',
+        startAt: '2027-10-12T08:00:00.000Z',
+        endAt: '2027-10-12T18:00:00.000Z',
       }),
     );
     expect(await screen.findByText('Event created')).toBeInTheDocument();
@@ -321,13 +373,13 @@ describe('CreateEventPage platform administrator flow', () => {
     await userEvent.click(screen.getByRole('option', { name: 'Northstar Events' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
     expect(await screen.findByText('This is an unfinished conference.')).toBeInTheDocument();
-    expect(await screen.findByLabelText('Choose the event dates')).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('Add the event start and end dates, times, and timezone…')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'New chat' }));
 
     expect(await screen.findByText('Starting a fresh event setup.')).toBeInTheDocument();
     expect(screen.queryByText('This is an unfinished conference.')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Choose the event dates')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Add the event start and end dates, times, and timezone…')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Event information')).toBeEnabled();
   });
 
@@ -417,7 +469,7 @@ describe('CreateEventPage platform administrator flow', () => {
     expect(screen.getByRole('button', { name: 'Download Plain text template' })).toBeInTheDocument();
   });
 
-  it('shows the custom date and time step inside the setup conversation', async () => {
+  it('accepts event dates as another message in the setup conversation', async () => {
     const setupRequests: FormData[] = [];
     server.use(
       http.get(`${api}/auth/me`, () =>
@@ -463,7 +515,7 @@ describe('CreateEventPage platform administrator flow', () => {
           sessionId: 'setup-a',
           message:
             setupRequests.length === 1
-              ? 'Choose the start and end date and time below.'
+              ? 'What are the start and end dates and times, and which timezone should I use?'
               : 'Now add the location.',
           event: {
             name: 'Leadership Forum',
@@ -504,24 +556,13 @@ describe('CreateEventPage platform administrator flow', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
-    expect(await screen.findByLabelText('Choose the event dates')).toBeInTheDocument();
+    expect(await screen.findByText('What are the start and end dates and times, and which timezone should I use?')).toBeInTheDocument();
     expect(screen.queryByLabelText('Live event brief')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Start date and time' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Apply date and time' }));
-    await userEvent.click(screen.getByRole('button', { name: 'End date and time' }));
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Hour' }), '10');
-    await userEvent.click(screen.getByRole('button', { name: 'Apply date and time' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Send dates' }));
+    await userEvent.type(composer, 'October 12, 2027 at 9 AM to October 12, 2027 at 6 PM, Europe/Lisbon');
+    await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     await waitFor(() => expect(setupRequests).toHaveLength(2));
-    expect(setupRequests[1]?.get('text')).toEqual(
-      expect.stringContaining('Start date and time:'),
-    );
-    expect(setupRequests[1]?.get('text')).toEqual(expect.stringContaining('End date and time:'));
-    expect(setupRequests[1]?.get('text')).toEqual(expect.stringContaining('Timezone:'));
-    expect(setupRequests[1]?.get('startAt')).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
-    expect(setupRequests[1]?.get('endAt')).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
-    expect(setupRequests[1]?.get('timezone')).toBeTruthy();
+    expect(setupRequests[1]?.get('text')).toBe('October 12, 2027 at 9 AM to October 12, 2027 at 6 PM, Europe/Lisbon');
   });
 });

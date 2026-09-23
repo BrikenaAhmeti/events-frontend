@@ -174,6 +174,9 @@ export const en = {
     sendSetupMessage: 'Send message',
     reviewCompleteMessage:
       'I’ve reviewed what you shared and organized it into the event details below.',
+    confirmDocumentDetailsPrompt:
+      'Review the details extracted from your document. Confirm them here, or type corrections in the chat before continuing.',
+    confirmDocumentDetails: 'Confirm extracted details',
     eventBriefTemplate: 'Fillable event brief',
     eventBriefTemplateDescription:
       'Choose the format that is easiest for your team to complete and upload here.',
@@ -201,7 +204,7 @@ export const en = {
     chatReviewReady: 'Everything required is ready. You can create the workspace or tell me what to change.',
     chatKeepAnswering: 'Keep answering in the chat. I’ll ask for the next related group of details.',
     basicsChatPlaceholder: 'Name, short description, event type — separated by commas',
-    datesChatPlaceholder: 'Use the date picker above, or type the dates here…',
+    datesChatPlaceholder: 'Add the event start and end dates, times, and timezone…',
     locationChatPlaceholder: 'City, venue, address — separated by commas',
     organizerChatPlaceholder: 'Organizer name, email — separated by a comma',
     chooseEventDates: 'Choose the event dates',

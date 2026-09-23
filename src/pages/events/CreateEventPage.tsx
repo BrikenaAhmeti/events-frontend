@@ -26,7 +26,6 @@ import {
   UserMessage as UserChatBubble,
 } from '../../components/molecules/ChatMessage';
 import { CustomSelect } from '../../components/molecules/CustomSelect';
-import { DateTimePicker } from '../../components/molecules/DateTimePicker';
 import { activeClientId, can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
 import { CompletenessPanel } from '../../features/events/CompletenessPanel';
@@ -74,6 +73,7 @@ type SetupAnalysis = {
     category?: string;
   }>;
   guests: Array<{ fullName: string; email: string; company?: string; guestGroup?: string }>;
+  documentReviewPending?: boolean;
   extractedFacts: number;
   extractedScheduleItems: number;
   file: { name: string; size: number } | null;
@@ -101,6 +101,7 @@ type SetupStart = {
     facts: SetupAnalysis['facts'];
     schedule: SetupAnalysis['schedule'];
     guests: SetupAnalysis['guests'];
+    documentReviewPending?: boolean;
     suggestedName: string;
     nameWasProvided: boolean;
   };
@@ -117,10 +118,6 @@ type SetupConversationMessage = {
 type SetupSubmission = {
   text: string;
   file: File | null;
-  displayText?: string;
-  startAt?: string;
-  endAt?: string;
-  timezone?: string;
 };
 
 type GuidedSetupStep = 'basics' | 'dates' | 'location' | 'organizer' | 'details' | 'ready';
@@ -143,11 +140,6 @@ const emptyDraft: Draft = {
   organizerName: '',
   organizerEmail: '',
 };
-
-const asLocalDateTime = (value: string | undefined) =>
-  value && !Number.isNaN(new Date(value).getTime())
-    ? new Date(value).toISOString().slice(0, 16)
-    : '';
 
 const evaluateDraft = (draft: Draft): EventCompleteness => {
   const required: Array<[string, string]> = [
@@ -198,6 +190,7 @@ export function CreateEventPage() {
   const [file, setFile] = useState<File | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [reviewed, setReviewed] = useState(false);
+  const [documentReviewPending, setDocumentReviewPending] = useState(false);
   const [selectedClientMessage, setSelectedClientMessage] = useState('');
   const [conversation, setConversation] = useState<SetupConversationMessage[]>([]);
   const [analyzedContent, setAnalyzedContent] = useState<
@@ -237,11 +230,12 @@ export function CreateEventPage() {
         ...Object.fromEntries(
           Object.entries(restoredEvent).filter(([, value]) => typeof value === 'string'),
         ),
-        startAt: asLocalDateTime(restoredEvent.startAt),
-        endAt: asLocalDateTime(restoredEvent.endAt),
+        startAt: restoredEvent.startAt ?? '',
+        endAt: restoredEvent.endAt ?? '',
       });
       const hasReviewedDetails = Object.values(restoredEvent).some(Boolean);
       setReviewed(hasReviewedDetails);
+      setDocumentReviewPending(Boolean(restored.documentReviewPending));
       setAnalyzedContent({
         facts: restored.facts ?? [],
         schedule: restored.schedule ?? [],
@@ -255,26 +249,23 @@ export function CreateEventPage() {
     },
   });
   const analyze = useMutation({
-    mutationFn: ({ text, file: submittedFile, startAt, endAt, timezone }: SetupSubmission) =>
+    mutationFn: ({ text, file: submittedFile }: SetupSubmission) =>
       apiClient.form<SetupAnalysis>(
         '/events/setup/analyze',
         {
           clientId,
           sessionId,
           ...(text ? { text } : {}),
-          ...(startAt ? { startAt } : {}),
-          ...(endAt ? { endAt } : {}),
-          ...(timezone ? { timezone } : {}),
         },
         submittedFile ?? undefined,
       ),
-    onMutate: ({ text, displayText, file: submittedFile }) => {
+    onMutate: ({ text, file: submittedFile }) => {
       setConversation((current) => [
         ...current,
         {
           id: crypto.randomUUID(),
           role: 'user',
-          ...(text ? { text: displayText ?? text } : {}),
+          ...(text ? { text } : {}),
           ...(submittedFile ? { fileName: submittedFile.name } : {}),
         },
       ]);
@@ -282,13 +273,12 @@ export function CreateEventPage() {
       setFile(null);
     },
     onSuccess: (result) => {
-      setDraft((current) => ({
-        ...current,
+      setDraft({
+        ...emptyDraft,
         ...result.event,
-        name: result.event.name ?? current.name,
-        startAt: result.event.startAt ? asLocalDateTime(result.event.startAt) : current.startAt,
-        endAt: result.event.endAt ? asLocalDateTime(result.event.endAt) : current.endAt,
-      }));
+        startAt: result.event.startAt ?? '',
+        endAt: result.event.endAt ?? '',
+      });
       setAnalyzedContent({
         facts: result.facts ?? [],
         schedule: result.schedule ?? [],
@@ -297,6 +287,7 @@ export function CreateEventPage() {
         extractedScheduleItems: result.extractedScheduleItems,
       });
       if (!result.template) setReviewed(true);
+      setDocumentReviewPending(Boolean(result.documentReviewPending));
       setConversation((current) => [
         ...current,
         {
@@ -319,8 +310,8 @@ export function CreateEventPage() {
         ...Object.fromEntries(
           Object.entries(draft).filter(([, value]) => typeof value === 'string' && value.trim()),
         ),
-        startAt: draft.startAt ? new Date(draft.startAt).toISOString() : undefined,
-        endAt: draft.endAt ? new Date(draft.endAt).toISOString() : undefined,
+        startAt: draft.startAt || undefined,
+        endAt: draft.endAt || undefined,
         facts: analyzedContent.facts,
         schedule: analyzedContent.schedule,
       });
@@ -340,6 +331,7 @@ export function CreateEventPage() {
     analyze.reset();
     setDraft(emptyDraft);
     setReviewed(false);
+    setDocumentReviewPending(false);
     setAnalyzedContent({
       facts: [],
       schedule: [],
@@ -361,19 +353,6 @@ export function CreateEventPage() {
       file,
     });
   };
-  const sendDates = (startAt: string, endAt: string, timezone: string) => {
-    if (!setupReady || analyze.isPending) return;
-    const startAtIso = new Date(startAt).toISOString();
-    const endAtIso = new Date(endAt).toISOString();
-    analyze.mutate({
-      text: `Start date and time: ${startAtIso}\nEnd date and time: ${endAtIso}\nTimezone: ${timezone}`,
-      displayText: `${formatDraftDate(startAt)} – ${formatDraftDate(endAt)} · ${timezone}`,
-      file: null,
-      startAt: startAtIso,
-      endAt: endAtIso,
-      timezone,
-    });
-  };
   const handleBriefSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     submitBrief();
@@ -384,7 +363,7 @@ export function CreateEventPage() {
     submitBrief();
   };
   const draftCompleteness = evaluateDraft(draft);
-  const canSubmit = Boolean(clientId && sessionId) && draftCompleteness.ready;
+  const canSubmit = Boolean(clientId && sessionId) && draftCompleteness.ready && !documentReviewPending;
   const guidedStep = getGuidedSetupStep(draftCompleteness);
   const composerDisabled = !setupReady || start.isPending || analyze.isPending || create.isPending;
   useEffect(() => {
@@ -491,14 +470,17 @@ export function CreateEventPage() {
           )}
           {analyze.isPending && <TypingBubble label={t('reviewingEventInformation')} />}
           {analyze.error && <ChatBubble danger>{analyze.error.message}</ChatBubble>}
-          {reviewed && guidedStep === 'dates' && !analyze.isPending && (
-            <ChatBubble wide>
-              <EventDateResponseCard
-                initialStartAt={draft.startAt}
-                initialEndAt={draft.endAt}
-                disabled={create.isPending}
-                onSubmit={sendDates}
-              />
+          {documentReviewPending && !analyze.isPending && (
+            <ChatBubble>
+              <p className="text-sm leading-6">{t('confirmDocumentDetailsPrompt')}</p>
+              <Button
+                className="mt-3"
+                type="button"
+                onClick={() => analyze.mutate({ text: 'Confirm details', file: null })}
+              >
+                <Check className="size-4" />
+                {t('confirmDocumentDetails')}
+              </Button>
             </ChatBubble>
           )}
           {reviewed && canSubmit && (
@@ -598,66 +580,6 @@ export function CreateEventPage() {
   );
 }
 
-function EventDateResponseCard({
-  initialStartAt,
-  initialEndAt,
-  disabled,
-  onSubmit,
-}: {
-  initialStartAt: string;
-  initialEndAt: string;
-  disabled: boolean;
-  onSubmit: (startAt: string, endAt: string, timezone: string) => void;
-}) {
-  const { t } = useTranslation('events');
-  const [startAt, setStartAt] = useState(initialStartAt);
-  const [endAt, setEndAt] = useState(initialEndAt);
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  const validRange = Boolean(
-    startAt && endAt && new Date(endAt).getTime() > new Date(startAt).getTime(),
-  );
-  return (
-    <div aria-label={t('chooseEventDates')}>
-      <p className="text-sm font-semibold">{t('chooseEventDates')}</p>
-      <p className="mt-1 text-sm leading-6 text-muted-foreground">
-        {t('chooseEventDatesDescription', { timezone })}
-      </p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <FormField label={t('startAt')} htmlFor="setup-start-at">
-          <DateTimePicker
-            id="setup-start-at"
-            label={t('startAt')}
-            value={startAt}
-            onChange={setStartAt}
-            disabled={disabled}
-          />
-        </FormField>
-        <FormField label={t('endAt')} htmlFor="setup-end-at">
-          <DateTimePicker
-            id="setup-end-at"
-            label={t('endAt')}
-            value={endAt}
-            onChange={setEndAt}
-            disabled={disabled}
-          />
-        </FormField>
-      </div>
-      {startAt && endAt && !validRange && (
-        <p className="mt-3 text-sm text-danger">{t('endAfterStart')}</p>
-      )}
-      <Button
-        className="mt-4"
-        size="sm"
-        disabled={!validRange || disabled}
-        onClick={() => onSubmit(startAt, endAt, timezone)}
-      >
-        <Send className="size-4" />
-        {t('sendDates')}
-      </Button>
-    </div>
-  );
-}
-
 function getGuidedSetupStep(completeness: EventCompleteness): GuidedSetupStep {
   const missing = new Set(completeness.missing);
   if (['name', 'description', 'category'].some((field) => missing.has(field))) return 'basics';
@@ -736,7 +658,7 @@ function EventDraftSummary({
           label={t('dateRange')}
           value={
             draft.startAt
-              ? `${formatDraftDate(draft.startAt)}${draft.endAt ? ` – ${formatDraftDate(draft.endAt)}` : ''}`
+              ? `${formatDraftDate(draft.startAt, draft.timezone)}${draft.endAt ? ` – ${formatDraftDate(draft.endAt, draft.timezone)}` : ''}`
               : t('waitingForAnswer')
           }
         />
@@ -893,8 +815,12 @@ function EventBriefTemplateCard() {
   );
 }
 
-function formatDraftDate(value: string): string {
+function formatDraftDate(value: string, timeZone: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+  try {
+    return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+  }
 }
