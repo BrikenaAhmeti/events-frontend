@@ -65,7 +65,12 @@ export type EventSummary = {
   operationalStatus: 'UNSCHEDULED' | 'UPCOMING' | 'ONGOING' | 'PAST' | 'CANCELLED';
   client: { id: string; name: string };
   createdBy: { id: string; firstName: string; lastName: string; email: string };
-  capabilities: { canEdit: boolean; canDelete: boolean; canCancel: boolean };
+  capabilities: {
+    canEdit: boolean;
+    canUploadDocuments?: boolean;
+    canDelete: boolean;
+    canCancel: boolean;
+  };
   completeness: EventCompleteness;
   _count: { guests: number; documents: number; invitations: number };
 };

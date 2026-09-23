@@ -90,13 +90,14 @@ type SetupStart = {
   clientId: string;
   clientName: string;
   resumed: boolean;
-  messages: Array<{
+  message?: string;
+  messages?: Array<{
     id: string;
     role: 'USER' | 'CONCIERGE';
     content: string;
     metadata?: { fileName?: string; setupTemplate?: 'EVENT_BRIEF' };
   }>;
-  draft: {
+  draft?: {
     event: Partial<Draft>;
     facts: SetupAnalysis['facts'];
     schedule: SetupAnalysis['schedule'];
@@ -209,22 +210,30 @@ export function CreateEventPage() {
     enabled: Boolean(user),
   });
   const start = useMutation({
-    mutationFn: ({ nextClientId, restart = false }: { nextClientId: string; restart?: boolean }) =>
-      apiClient.post<SetupStart>('/events/setup/start', { clientId: nextClientId, restart }),
+    mutationFn: async ({ nextClientId, restart = false }: { nextClientId: string; restart?: boolean }) => {
+      const result = await apiClient.post<SetupStart>('/events/setup/start', { clientId: nextClientId, restart });
+      if (!result?.sessionId || !result.clientId) throw new Error(t('setupStartInvalidResponse'));
+      return result;
+    },
     onSuccess: (result) => {
       setConfirmedClientId(result.clientId);
       setSessionId(result.sessionId);
-      setConversation(
-        result.messages.map((message) => ({
+      const messages = Array.isArray(result.messages) ? result.messages : [];
+      setConversation(messages.length
+        ? messages.map((message) => ({
           id: message.id,
           role: message.role === 'USER' ? 'user' : 'assistant',
           text: message.content,
           fileName: message.metadata?.fileName,
           template: message.metadata?.setupTemplate,
-        })),
-      );
+        }))
+        : [{
+            id: `welcome-${result.sessionId}`,
+            role: 'assistant',
+            text: result.message?.trim() || t('setupWelcomeFallback'),
+          }]);
       const restored = result.draft;
-      const restoredEvent = restored.event ?? {};
+      const restoredEvent = restored?.event ?? {};
       setDraft({
         ...emptyDraft,
         ...Object.fromEntries(
@@ -235,13 +244,13 @@ export function CreateEventPage() {
       });
       const hasReviewedDetails = Object.values(restoredEvent).some(Boolean);
       setReviewed(hasReviewedDetails);
-      setDocumentReviewPending(Boolean(restored.documentReviewPending));
+      setDocumentReviewPending(Boolean(restored?.documentReviewPending));
       setAnalyzedContent({
-        facts: restored.facts ?? [],
-        schedule: restored.schedule ?? [],
-        guests: restored.guests ?? [],
-        extractedFacts: restored.facts?.length ?? 0,
-        extractedScheduleItems: restored.schedule?.length ?? 0,
+        facts: restored?.facts ?? [],
+        schedule: restored?.schedule ?? [],
+        guests: restored?.guests ?? [],
+        extractedFacts: restored?.facts?.length ?? 0,
+        extractedScheduleItems: restored?.schedule?.length ?? 0,
       });
       setSource('');
       setFile(null);

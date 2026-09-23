@@ -9,7 +9,7 @@ import { PageHeader } from '../../components/molecules/PageHeader';
 import { EventCard } from '../../components/organisms/EventCard';
 import { activeClientId, can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
-import { apiClient } from '../../lib/api/api-client';
+import { apiClient, ApiError } from '../../lib/api/api-client';
 import type { EventSummary } from '../../types/domain';
 
 type Dashboard = {
@@ -69,6 +69,11 @@ export function DashboardPage() {
         <EmptyState
           icon={CircleDashed}
           title={t('unavailable', { ns: 'common' })}
+          description={dashboard.error instanceof ApiError
+            ? `${dashboard.error.message}${dashboard.error.response.requestId
+              ? ` · Request ID: ${dashboard.error.response.requestId}`
+              : ''}`
+            : dashboard.error.message}
           action={
             <Button onClick={() => void dashboard.refetch()}>{t('retry', { ns: 'common' })}</Button>
           }

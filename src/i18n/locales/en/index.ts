@@ -172,6 +172,9 @@ export const en = {
     removeFile: 'Remove attached file',
     reviewEventInformation: 'Review event information',
     sendSetupMessage: 'Send message',
+    setupWelcomeFallback:
+      'Tell me what you know about the event, including dates, location, organizer, and guests. You can attach an event document too.',
+    setupStartInvalidResponse: 'The setup conversation could not be opened. Please try again.',
     reviewCompleteMessage:
       'I’ve reviewed what you shared and organized it into the event details below.',
     confirmDocumentDetailsPrompt:
@@ -443,9 +446,10 @@ export const en = {
     uploaded: 'Document uploaded and queued for processing.',
     uploading: 'Uploading…',
     permissionRequired: 'Document upload access is required',
+    eventClosed: 'Documents cannot be added to a cancelled or archived event',
     safetyTitle: 'Safe document processing',
     safetyDescription:
-      'Original files remain private. Useful event details are extracted with their source and kept inside this event workspace.',
+      'Original files remain private. Their readable content becomes reference material for Concierge answers in this event workspace.',
   },
   invitations: {
     title: 'Guest access',
