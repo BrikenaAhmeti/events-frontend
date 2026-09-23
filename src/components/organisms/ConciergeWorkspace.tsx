@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../atoms/Button';
 import { Textarea } from '../atoms/Input';
 import { AssistantMessage, TypingIndicator, UserMessage } from '../molecules/ChatMessage';
+import { GuestRowsCard } from './GuestRowsCard';
 import { apiClient } from '../../lib/api/api-client';
 import { documentKeys, eventKeys, guestKeys, invitationKeys } from '../../lib/api/query-keys';
 import { useEventSocket } from '../../lib/websocket/use-event-socket';
@@ -46,6 +47,7 @@ export function ConciergeWorkspace({
   const { t } = useTranslation('concierge');
   const [message, setMessage] = useState('');
   const [step, setStep] = useState<'details' | 'guests' | 'publish'>('details');
+  const [guestRowsPending, setGuestRowsPending] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasStreamingText, setHasStreamingText] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -307,7 +309,12 @@ export function ConciergeWorkspace({
                 <>
                   <p>{allowGuestManage ? t('guestChatPrompt') : t('guestPermissionPrompt')}</p>
                   <p className="font-semibold">{t('guestCount', { count: guestCount })}</p>
-                  <Button type="button" onClick={() => setStep('publish')}>
+                  {allowGuestManage && <GuestRowsCard eventId={eventId} onPendingChange={setGuestRowsPending} onSaved={() => {
+                    void queryClient.invalidateQueries({ queryKey: eventKeys.detail(eventId) });
+                    void queryClient.invalidateQueries({ queryKey: guestKeys.list(eventId) });
+                  }} />}
+                  {guestRowsPending && <p className="text-xs text-muted-foreground">{t('saveGuestBeforePublish')}</p>}
+                  <Button type="button" disabled={guestRowsPending} onClick={() => setStep('publish')}>
                     {t('continueToPublish')}
                   </Button>
                 </>

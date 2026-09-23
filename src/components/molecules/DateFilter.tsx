@@ -25,15 +25,19 @@ export function DateFilter({
   value,
   onChange,
   className,
+  initialMode,
+  rangeOnly = false,
 }: {
   value: DateFilterValue;
   onChange: (value: DateFilterValue) => void;
   className?: string;
+  initialMode?: DateMode;
+  rangeOnly?: boolean;
 }) {
   const { t } = useTranslation('events');
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<DateMode>(() =>
-    value.from || value.to ? 'range' : 'single',
+    rangeOnly ? 'range' : initialMode ?? (value.from || value.to ? 'range' : 'single'),
   );
   const [visibleMonth, setVisibleMonth] = useState(() =>
     startOfMonth(parseDate(value.date || value.from) ?? new Date()),
@@ -131,7 +135,7 @@ export function DateFilter({
           aria-label={t('dateFilter')}
           className="absolute left-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-border bg-surface-raised p-4 shadow-[0_18px_48px_rgb(0_0_0/0.18)]"
         >
-          <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-sunken p-1">
+          {!rangeOnly && <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-sunken p-1">
             {(['single', 'range'] as const).map((option) => (
               <button
                 key={option}
@@ -148,7 +152,7 @@ export function DateFilter({
                 {t(option === 'single' ? 'singleDate' : 'dateRange')}
               </button>
             ))}
-          </div>
+          </div>}
 
           <div className="mt-4 flex items-center justify-between">
             <button

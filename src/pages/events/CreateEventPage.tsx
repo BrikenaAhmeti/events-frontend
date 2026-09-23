@@ -26,6 +26,7 @@ import {
   UserMessage as UserChatBubble,
 } from '../../components/molecules/ChatMessage';
 import { CustomSelect } from '../../components/molecules/CustomSelect';
+import { EventDateRangeCard } from '../../components/organisms/EventDateRangeCard';
 import { activeClientId, can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
 import { CompletenessPanel } from '../../features/events/CompletenessPanel';
@@ -60,6 +61,7 @@ type SetupAnalysis = {
   sessionId: string;
   message?: string;
   event: Partial<Draft>;
+  dateHints?: { startDate: string; endDate: string };
   suggestedName: string;
   nameWasProvided: boolean;
   completeness: EventCompleteness;
@@ -72,7 +74,7 @@ type SetupAnalysis = {
     location?: string;
     category?: string;
   }>;
-  guests: Array<{ fullName: string; email: string; company?: string; guestGroup?: string }>;
+  guests: Array<{ fullName: string; email: string; company?: string; guestGroup?: string; notes?: string }>;
   documentReviewPending?: boolean;
   extractedFacts: number;
   extractedScheduleItems: number;
@@ -99,6 +101,7 @@ type SetupStart = {
   }>;
   draft?: {
     event: Partial<Draft>;
+    dateHints?: { startDate: string; endDate: string };
     facts: SetupAnalysis['facts'];
     schedule: SetupAnalysis['schedule'];
     guests: SetupAnalysis['guests'];
@@ -119,6 +122,9 @@ type SetupConversationMessage = {
 type SetupSubmission = {
   text: string;
   file: File | null;
+  startAt?: string;
+  endAt?: string;
+  timezone?: string;
 };
 
 type GuidedSetupStep = 'basics' | 'dates' | 'location' | 'organizer' | 'details' | 'ready';
@@ -191,6 +197,7 @@ export function CreateEventPage() {
   const [file, setFile] = useState<File | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [reviewed, setReviewed] = useState(false);
+  const [dateHints, setDateHints] = useState({ startDate: '', endDate: '' });
   const [documentReviewPending, setDocumentReviewPending] = useState(false);
   const [selectedClientMessage, setSelectedClientMessage] = useState('');
   const [conversation, setConversation] = useState<SetupConversationMessage[]>([]);
@@ -245,6 +252,7 @@ export function CreateEventPage() {
       const hasReviewedDetails = Object.values(restoredEvent).some(Boolean);
       setReviewed(hasReviewedDetails);
       setDocumentReviewPending(Boolean(restored?.documentReviewPending));
+      setDateHints(restored?.dateHints ?? { startDate: '', endDate: '' });
       setAnalyzedContent({
         facts: restored?.facts ?? [],
         schedule: restored?.schedule ?? [],
@@ -258,21 +266,25 @@ export function CreateEventPage() {
     },
   });
   const analyze = useMutation({
-    mutationFn: ({ text, file: submittedFile }: SetupSubmission) =>
+    mutationFn: ({ text, file: submittedFile, startAt, endAt, timezone }: SetupSubmission) =>
       apiClient.form<SetupAnalysis>(
         '/events/setup/analyze',
         {
           clientId,
           sessionId,
           ...(text ? { text } : {}),
+          ...(startAt ? { startAt } : {}),
+          ...(endAt ? { endAt } : {}),
+          ...(timezone ? { timezone } : {}),
         },
         submittedFile ?? undefined,
       ),
     onMutate: ({ text, file: submittedFile }) => {
+      const optimisticId = crypto.randomUUID();
       setConversation((current) => [
         ...current,
         {
-          id: crypto.randomUUID(),
+          id: optimisticId,
           role: 'user',
           ...(text ? { text } : {}),
           ...(submittedFile ? { fileName: submittedFile.name } : {}),
@@ -280,6 +292,12 @@ export function CreateEventPage() {
       ]);
       setSource('');
       setFile(null);
+      return { optimisticId };
+    },
+    onError: (_error, submission, context) => {
+      setConversation((current) => current.filter((message) => message.id !== context?.optimisticId));
+      setSource(submission.text);
+      setFile(submission.file);
     },
     onSuccess: (result) => {
       setDraft({
@@ -297,6 +315,7 @@ export function CreateEventPage() {
       });
       if (!result.template) setReviewed(true);
       setDocumentReviewPending(Boolean(result.documentReviewPending));
+      if (result.dateHints) setDateHints(result.dateHints);
       setConversation((current) => [
         ...current,
         {
@@ -341,6 +360,7 @@ export function CreateEventPage() {
     setDraft(emptyDraft);
     setReviewed(false);
     setDocumentReviewPending(false);
+    setDateHints({ startDate: '', endDate: '' });
     setAnalyzedContent({
       facts: [],
       schedule: [],
@@ -479,6 +499,19 @@ export function CreateEventPage() {
           )}
           {analyze.isPending && <TypingBubble label={t('reviewingEventInformation')} />}
           {analyze.error && <ChatBubble danger>{analyze.error.message}</ChatBubble>}
+          {setupReady && reviewed && guidedStep === 'dates' && !analyze.isPending && (
+            <ChatBubble wide>
+              <EventDateRangeCard
+                value={{ startAt: draft.startAt, endAt: draft.endAt, timezone: draft.timezone,
+                  startDate: dateHints.startDate, endDate: dateHints.endDate }}
+                disabled={composerDisabled}
+                onSubmit={({ startAt, endAt, timezone }) => analyze.mutate({
+                  text: `The event starts at ${startAt} and ends at ${endAt} in ${timezone}.`,
+                  file: null, startAt, endAt, timezone,
+                })}
+              />
+            </ChatBubble>
+          )}
           {documentReviewPending && !analyze.isPending && (
             <ChatBubble>
               <p className="text-sm leading-6">{t('confirmDocumentDetailsPrompt')}</p>
