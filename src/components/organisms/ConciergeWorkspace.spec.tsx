@@ -10,12 +10,14 @@ const streamEndpoint = 'http://localhost:3000/api/v1/guest/events/event-a/concie
 const chatsEndpoint = 'http://localhost:3000/api/v1/guest/events/event-a/concierge/chats';
 
 describe('ConciergeWorkspace', () => {
-  it('asks for a language first, then offers guest questions that fit any event', async () => {
+  it('asks for a language first, then shows the AI’s opening question', async () => {
     server.use(
       http.get(historyEndpoint, () => HttpResponse.json({ id: null, language: null, messages: [] })),
       http.post(chatsEndpoint, async ({ request }) => {
         expect(await request.json()).toEqual({ language: 'en' });
-        return HttpResponse.json({ id: 'new-chat', language: 'en', messages: [] });
+        return HttpResponse.json({ id: 'new-chat', language: 'en', messages: [
+          { id: 'opening-a', role: 'CONCIERGE', content: 'Welcome to the event. How can I help you?' },
+        ] });
       }),
     );
     renderApp(<ConciergeWorkspace eventId="event-a" guest />);
@@ -25,10 +27,8 @@ describe('ConciergeWorkspace', () => {
     await user.click(screen.getByRole('button', { name: 'Chat language' }));
     await user.type(screen.getByRole('searchbox', { name: 'Search languages' }), 'English');
     await user.click(screen.getByRole('option', { name: /English/ }));
-    expect(await screen.findByRole('button', { name: 'What should I know about this event?' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'When does the event start?' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Where is the event taking place?' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'What time is dinner?' })).not.toBeInTheDocument();
+    expect(await screen.findByText('Welcome to the event. How can I help you?')).toBeInTheDocument();
+    expect(screen.queryByText('How can I help with your event?')).not.toBeInTheDocument();
   });
 
   it('loads history and renders a streamed guest answer', async () => {
@@ -122,13 +122,16 @@ describe('ConciergeWorkspace', () => {
       ] })),
       http.post(chatsEndpoint, async ({ request }) => {
         expect(await request.json()).toEqual({ language: 'sq' });
-        return HttpResponse.json({ id: 'new-chat', language: 'sq', messages: [] });
+        return HttpResponse.json({ id: 'new-chat', language: 'sq', messages: [
+          { id: 'opening-sq', role: 'CONCIERGE', content: 'Si mund t’ju ndihmoj me këtë event?' },
+        ] });
       }),
     );
     renderApp(<ConciergeWorkspace eventId="event-a" guest />);
     expect(await screen.findByText('Old answer')).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole('button', { name: 'New chat' }));
     await waitFor(() => expect(screen.queryByText('Old answer')).not.toBeInTheDocument());
+    expect(screen.getByText('Si mund t’ju ndihmoj me këtë event?')).toBeInTheDocument();
     expect(screen.getByText(/Albanian/)).toBeInTheDocument();
     expect(screen.getByLabelText('Write a message…')).toBeInTheDocument();
   });

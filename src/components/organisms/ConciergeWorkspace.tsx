@@ -241,7 +241,7 @@ export function ConciergeWorkspace({
     if (chatLog) {
       chatLog.scrollTop = sharingAccess ? 0 : chatLog.scrollHeight;
     }
-  }, [messages, send.isPending, sharingAccess, step, upload.isPending]);
+  }, [messages, send.isPending, sharingAccess, startGuestChat.isPending, step, upload.isPending]);
   const submit = () => {
     const content = message.trim();
     if (!content || send.isPending || publish.isPending || startGuestChat.isPending || (guest && !guestLanguage)) return;
@@ -310,22 +310,15 @@ export function ConciergeWorkspace({
             </div>
           </AssistantMessage>
         )}
-        {!history.isLoading && messages.length === 0 && !sharingAccess && (!guest || guestLanguage) && (
+        {!history.isLoading && messages.length === 0 && !sharingAccess && !guest && (
           <>
-            {(!guest || guestLanguage === 'en') && <AssistantMessage>
+            <AssistantMessage>
               <p className="text-sm leading-6">
-                {guest ? t('guestWelcome') : t('organizerWelcome')}
+                {t('organizerWelcome')}
               </p>
-            </AssistantMessage>}
-            {(!guest || guestLanguage === 'en') && <div className="ml-10 flex flex-wrap gap-2">
-              {(guest
-                ? [
-                    t('guestSuggestionOverview'),
-                    t('guestSuggestionWhen'),
-                    t('guestSuggestionWhere'),
-                  ]
-                : [t('organizerSuggestionPlan'), t('organizerSuggestionMissing')]
-              ).map((suggestion) => (
+            </AssistantMessage>
+            <div className="ml-10 flex flex-wrap gap-2">
+              {[t('organizerSuggestionPlan'), t('organizerSuggestionMissing')].map((suggestion) => (
                 <button
                   key={suggestion}
                   type="button"
@@ -338,7 +331,7 @@ export function ConciergeWorkspace({
                   {suggestion}
                 </button>
               ))}
-            </div>}
+            </div>
           </>
         )}
         {(!guest || guestLanguage) && messages.map((item, index) =>
@@ -365,6 +358,7 @@ export function ConciergeWorkspace({
             </AssistantMessage>
           ),
         )}
+        {startGuestChat.isPending && <TypingIndicator label={t('startingGuestChat')} />}
         {send.isPending && !hasStreamingText && <TypingIndicator label={t('processing')} />}
         {upload.isPending && <TypingIndicator label={t('uploading')} />}
         {!guest && eventStatus === 'READY' && ready && allowPlanning && !history.isLoading && !publish.isSuccess && (
