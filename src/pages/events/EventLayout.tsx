@@ -3,7 +3,7 @@ import { CalendarDays, FileText, LayoutDashboard, Link2, MessageCircle, Users } 
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, useParams } from 'react-router-dom';
 import { Skeleton } from '../../components/atoms/Skeleton';
-import { StatusBadge } from '../../components/molecules/StatusBadge';
+import { EventStatusSummary } from '../../components/molecules/EventStatusSummary';
 import { can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
 import { apiClient } from '../../lib/api/api-client';
@@ -61,8 +61,10 @@ export function EventLayout() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-            <StatusBadge status={event.data.status} />
-            <StatusBadge status={event.data.operationalStatus} />
+            <EventStatusSummary
+              status={event.data.status}
+              operationalStatus={event.data.operationalStatus}
+            />
             <span className="text-sm font-bold tabular-nums">
               {t('readinessPercent', { score: event.data.completeness.score })}
             </span>

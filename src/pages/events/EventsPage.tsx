@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ListFilter,
+  PencilLine,
   Search,
   Trash2,
   UserRound,
@@ -21,6 +22,7 @@ import { ConfirmDialog } from '../../components/molecules/ConfirmDialog';
 import { CustomMultiSelect, CustomSelect } from '../../components/molecules/CustomSelect';
 import { DateFilter } from '../../components/molecules/DateFilter';
 import { EmptyState } from '../../components/molecules/EmptyState';
+import { EventStatusSummary } from '../../components/molecules/EventStatusSummary';
 import { PageHeader } from '../../components/molecules/PageHeader';
 import { StatusBadge } from '../../components/molecules/StatusBadge';
 import { activeClientId, can } from '../../features/auth/permissions';
@@ -30,6 +32,11 @@ import { eventKeys } from '../../lib/api/query-keys';
 import type { Client, EventSummary, Page } from '../../types/domain';
 
 type Creator = { id: string; firstName: string; lastName: string; email: string };
+
+const eventActionLinkClass =
+  'inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-primary bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/35 focus-visible:ring-offset-2 focus-visible:ring-offset-background';
+const eventDetailsLinkClass =
+  'inline-flex min-h-9 items-center justify-center rounded-xl border border-border bg-surface-raised px-3 text-sm font-semibold text-foreground transition-colors hover:border-primary/45 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/35 focus-visible:ring-offset-2 focus-visible:ring-offset-background';
 
 export function EventsPage() {
   const { t } = useTranslation('events');
@@ -239,20 +246,22 @@ export function EventsPage() {
           <div className="space-y-3 md:hidden">
             {events.data.items.map((event) => (
               <article key={event.id} className="rounded-xl border border-border bg-surface p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link
-                      className="font-display text-xl hover:text-primary"
-                      to={`/app/events/${event.id}`}
-                    >
-                      {event.name}
-                    </Link>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t(`categories.${event.category}`)}
-                    </p>
-                  </div>
-                  <StatusBadge status={event.operationalStatus} />
+                <div className="min-w-0">
+                  <Link
+                    className="font-display text-xl hover:text-primary"
+                    to={`/app/events/${event.id}`}
+                  >
+                    {event.name}
+                  </Link>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t(`categories.${event.category}`)}
+                  </p>
                 </div>
+                <EventStatusSummary
+                  className="mt-3"
+                  status={event.status}
+                  operationalStatus={event.operationalStatus}
+                />
                 <dl className="mt-4 grid gap-3 text-sm">
                   <div>
                     <dt className="text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">
@@ -277,17 +286,20 @@ export function EventsPage() {
                       </span>
                     </dd>
                   </div>
-                  <div>
-                    <dt className="text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                      {t('status', { ns: 'common' })}
-                    </dt>
-                    <dd className="mt-1">
-                      <StatusBadge status={event.status} />
-                    </dd>
-                  </div>
                 </dl>
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
+                  <Link className={eventDetailsLinkClass} to={`/app/events/${event.id}`}>
+                    {t('viewDetails')}
+                  </Link>
+                  {event.capabilities.canEdit && (
+                    <Link className={eventActionLinkClass} to={`/app/events/${event.id}?edit=1`}>
+                      <PencilLine className="size-4" aria-hidden />
+                      {t('editEvent')}
+                    </Link>
+                  )}
+                </div>
                 {(event.capabilities.canCancel || event.capabilities.canDelete) && (
-                  <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     {event.capabilities.canCancel && event.status !== 'CANCELLED' && (
                       <Button
                         size="sm"
@@ -314,7 +326,7 @@ export function EventsPage() {
             ))}
           </div>
           <div className="hidden overflow-x-auto rounded-xl border border-border bg-surface md:block">
-            <table className="w-full min-w-[960px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
               <thead className="bg-surface-sunken text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">{t('name')}</th>
@@ -342,6 +354,12 @@ export function EventsPage() {
                       <p className="mt-1 text-xs text-muted-foreground">
                         {t(`categories.${event.category}`)}
                       </p>
+                      <Link
+                        className="mt-2 inline-block text-sm font-semibold text-primary underline-offset-2 hover:underline"
+                        to={`/app/events/${event.id}`}
+                      >
+                        {t('viewDetails')}
+                      </Link>
                     </td>
                     <td className="px-4 py-4">{event.client.name}</td>
                     <td className="px-4 py-4 text-muted-foreground">{formatRange(event)}</td>
@@ -352,13 +370,19 @@ export function EventsPage() {
                       <p className="text-xs text-muted-foreground">{event.createdBy.email}</p>
                     </td>
                     <td className="px-4 py-4">
-                      <StatusBadge status={event.status} />
+                      <StatusBadge status={event.status} prominent />
                     </td>
                     <td className="px-4 py-4">
-                      <StatusBadge status={event.operationalStatus} />
+                      <StatusBadge status={event.operationalStatus} prominent />
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex justify-end gap-1">
+                        {event.capabilities.canEdit && (
+                          <Link className={eventActionLinkClass} to={`/app/events/${event.id}?edit=1`}>
+                            <PencilLine className="size-4" aria-hidden />
+                            {t('editEvent')}
+                          </Link>
+                        )}
                         {event.capabilities.canCancel && event.status !== 'CANCELLED' && (
                           <Button
                             size="sm"

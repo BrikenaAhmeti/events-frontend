@@ -20,9 +20,22 @@ const tones: Record<string, string> = {
   DISABLED: 'border-danger/35 bg-danger/10 text-danger',
   FAILED: 'border-danger/35 bg-danger/10 text-danger',
   REVOKED: 'border-danger/35 bg-danger/10 text-danger',
+  DRAFT: 'border-foreground/30 bg-foreground/10 text-foreground',
+  ARCHIVED: 'border-foreground/30 bg-foreground/10 text-foreground',
+  PAST: 'border-foreground/30 bg-foreground/10 text-foreground',
 };
 
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({
+  status,
+  prominent = false,
+}: {
+  status: string;
+  prominent?: boolean;
+}) {
   const { t } = useTranslation('common');
-  return <Badge className={tones[status]}>{t(`statuses.${status}`)}</Badge>;
+  return (
+    <Badge prominent={prominent} className={tones[status]}>
+      {t(`statuses.${status}`)}
+    </Badge>
+  );
 }

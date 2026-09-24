@@ -4,7 +4,7 @@ import { CalendarDays, Mail, MapPin, PencilLine, Plus, Trash2 } from 'lucide-rea
 import { useState } from 'react';
 import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { useToast } from '../../app/providers/toast-provider';
 import { Button } from '../../components/atoms/Button';
@@ -48,12 +48,21 @@ export function EventOverviewPage() {
   const { t } = useTranslation('events');
   const { data: user } = useCurrentUser();
   const mayEdit = Boolean(user && event.capabilities.canEdit);
+  const [searchParams, setSearchParams] = useSearchParams();
   const mayPublish = Boolean(
     user && (event.capabilities.canPublish ?? event.capabilities.canEdit) && can(user, 'EVENT_PUBLISH', event.clientId),
   );
   const [publishOpen, setPublishOpen] = useState(false);
   const [sendInvitationsOnPublish, setSendInvitationsOnPublish] = useState<boolean | null>(null);
-  const [editing, setEditing] = useState(false);
+  const editing = mayEdit && searchParams.get('edit') === '1';
+  const setEditMode = (value: boolean) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value) next.set('edit', '1');
+      else next.delete('edit');
+      return next;
+    }, { replace: true });
+  };
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -93,7 +102,7 @@ export function EventOverviewPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: eventKeys.detail(event.id) });
       showToast(t('updated'));
-      setEditing(false);
+      setEditMode(false);
     },
   });
   const publish = useMutation({
@@ -133,9 +142,9 @@ export function EventOverviewPage() {
           <div className="flex items-center justify-between">
             <h2 className="font-display text-2xl">{t('details')}</h2>
             {mayEdit && (
-              <Button size="sm" variant="quiet" onClick={() => setEditing((value) => !value)}>
+              <Button size="sm" variant="secondary" onClick={() => setEditMode(!editing)}>
                 <PencilLine className="size-4" />
-                {editing ? t('close', { ns: 'common' }) : t('edit')}
+                {editing ? t('close', { ns: 'common' }) : t('editEvent')}
               </Button>
             )}
           </div>

@@ -1,8 +1,8 @@
-import { CalendarDays, MapPin, Users } from 'lucide-react';
+import { ArrowRight, CalendarDays, MapPin, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import type { EventSummary } from '../../types/domain';
-import { StatusBadge } from '../molecules/StatusBadge';
+import { EventStatusSummary } from '../molecules/EventStatusSummary';
 
 const formatDate = (value: string | null, timezone: string | null, fallback: string) =>
   value
@@ -21,17 +21,19 @@ export function EventCard({ event }: { event: EventSummary }) {
       to={`/app/events/${event.id}`}
       className="group flex h-full flex-col rounded-2xl border border-border bg-surface p-5 transition hover:-translate-y-0.5 hover:border-primary/40 motion-reduce:transform-none sm:p-6"
     >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
-            {t(`categories.${event.category}`)}
-          </p>
-          <h2 className="mt-2 font-display text-2xl leading-tight group-hover:text-primary">
-            {event.name}
-          </h2>
-        </div>
-        <StatusBadge status={event.status} />
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
+          {t(`categories.${event.category}`)}
+        </p>
+        <h2 className="mt-2 font-display text-2xl leading-tight group-hover:text-primary">
+          {event.name}
+        </h2>
       </div>
+      <EventStatusSummary
+        className="mt-4"
+        status={event.status}
+        operationalStatus={event.operationalStatus}
+      />
       <p className="mt-4 line-clamp-2 text-sm leading-6 text-muted-foreground">
         {event.description ?? t('continueShaping')}
       </p>
@@ -60,6 +62,10 @@ export function EventCard({ event }: { event: EventSummary }) {
             style={{ width: `${event.completeness.score}%` }}
           />
         </div>
+        <span className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-primary group-hover:underline">
+          {t(event.capabilities.canEdit ? 'viewDetailsAndEdit' : 'viewDetails')}
+          <ArrowRight className="size-4" aria-hidden />
+        </span>
       </div>
     </Link>
   );

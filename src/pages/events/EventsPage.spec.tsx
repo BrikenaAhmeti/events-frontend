@@ -125,6 +125,88 @@ describe('EventsPage destructive actions', () => {
   });
 });
 
+describe('EventsPage event actions', () => {
+  it('shows clear details and edit links alongside both statuses', async () => {
+    renderPage();
+
+    const editLinks = await screen.findAllByRole('link', { name: 'Edit event' });
+    expect(editLinks).toHaveLength(2);
+    editLinks.forEach((link) =>
+      expect(link).toHaveAttribute('href', '/app/events/event-a?edit=1'),
+    );
+    expect(screen.getAllByRole('link', { name: 'View details' })).toHaveLength(2);
+    expect(screen.getAllByText('Event status')).not.toHaveLength(0);
+    expect(screen.getAllByText('Event timing')).not.toHaveLength(0);
+    expect(screen.getAllByText('Published')).not.toHaveLength(0);
+    expect(screen.getAllByText('Upcoming')).not.toHaveLength(0);
+  });
+
+  it('keeps details available without showing edit to read-only staff', async () => {
+    server.use(
+      http.get(`${api}/auth/me`, () =>
+        HttpResponse.json({
+          userId: 'staff-a',
+          email: 'staff@example.test',
+          firstName: 'Alex',
+          lastName: 'Staff',
+          platformRole: null,
+          memberships: [
+            { clientId: 'client-a', role: 'CLIENT_STAFF', status: 'ACTIVE', permissions: [] },
+          ],
+        }),
+      ),
+      http.get(`${api}/events/directory/creators`, () => HttpResponse.json([])),
+      http.get(`${api}/events`, () =>
+        HttpResponse.json({
+          items: [{ ...event, capabilities: { ...event.capabilities, canEdit: false } }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        }),
+      ),
+    );
+
+    renderApp(
+      <MemoryRouter initialEntries={['/app/events']}>
+        <EventsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findAllByRole('link', { name: 'View details' })).toHaveLength(2);
+    expect(screen.queryByRole('link', { name: 'Edit event' })).not.toBeInTheDocument();
+  });
+
+  it('shows edit to staff who can edit events', async () => {
+    server.use(
+      http.get(`${api}/auth/me`, () =>
+        HttpResponse.json({
+          userId: 'staff-a',
+          email: 'staff@example.test',
+          firstName: 'Alex',
+          lastName: 'Staff',
+          platformRole: null,
+          memberships: [
+            { clientId: 'client-a', role: 'CLIENT_STAFF', status: 'ACTIVE', permissions: ['EVENT_EDIT'] },
+          ],
+        }),
+      ),
+      http.get(`${api}/events/directory/creators`, () => HttpResponse.json([])),
+      http.get(`${api}/events`, () =>
+        HttpResponse.json({
+          items: [event],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        }),
+      ),
+    );
+
+    renderApp(
+      <MemoryRouter initialEntries={['/app/events']}>
+        <EventsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findAllByRole('link', { name: 'Edit event' })).toHaveLength(2);
+  });
+});
+
 describe('EventsPage event creation', () => {
   it('lets a platform administrator start creating an event before selecting a client filter', async () => {
     server.use(
@@ -160,6 +242,7 @@ describe('EventsPage event creation', () => {
 
     const createLink = await screen.findByRole('link', { name: 'Create event' });
     expect(createLink).toHaveAttribute('href', '/app/events/new');
+    expect(screen.getAllByRole('link', { name: 'Edit event' })).toHaveLength(2);
   });
 });
 

@@ -38,3 +38,28 @@ describe('EventOverviewPage publishing', () => {
     await waitFor(() => expect(publishBody).toEqual({ sendInvitations: false }));
   });
 });
+
+describe('EventOverviewPage editing', () => {
+  it('opens the edit form from a direct edit link', async () => {
+    server.use(
+      http.get('http://localhost:3000/api/v1/auth/me', () => HttpResponse.json({
+        userId: 'user-a', email: 'admin@example.test', firstName: 'Morgan', lastName: 'Reed', platformRole: null,
+        memberships: [{ clientId: 'client-a', role: 'CLIENT_ADMIN', status: 'ACTIVE', permissions: [] }],
+      })),
+    );
+
+    renderApp(
+      <MemoryRouter initialEntries={['/app/events/event-a?edit=1']}>
+        <Routes>
+          <Route path="/app/events/:eventId" element={<Outlet context={{ event }} />}>
+            <Route index element={<EventOverviewPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('textbox', { name: 'Description and purpose' })).toHaveValue('A leadership forum');
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('textbox', { name: 'Description and purpose' })).not.toBeInTheDocument();
+  });
+});
