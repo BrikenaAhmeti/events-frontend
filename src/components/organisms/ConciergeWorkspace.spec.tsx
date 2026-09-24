@@ -7,13 +7,24 @@ import { server } from '../../test/server';
 
 const historyEndpoint = 'http://localhost:3000/api/v1/guest/events/event-a/concierge/messages';
 const streamEndpoint = 'http://localhost:3000/api/v1/guest/events/event-a/concierge/stream';
+const chatsEndpoint = 'http://localhost:3000/api/v1/guest/events/event-a/concierge/chats';
 
 describe('ConciergeWorkspace', () => {
-  it('offers guest questions that fit any event', async () => {
+  it('asks for a language first, then offers guest questions that fit any event', async () => {
     server.use(
-      http.get(historyEndpoint, () => HttpResponse.json({ messages: [] })),
+      http.get(historyEndpoint, () => HttpResponse.json({ id: null, language: null, messages: [] })),
+      http.post(chatsEndpoint, async ({ request }) => {
+        expect(await request.json()).toEqual({ language: 'en' });
+        return HttpResponse.json({ id: 'new-chat', language: 'en', messages: [] });
+      }),
     );
     renderApp(<ConciergeWorkspace eventId="event-a" guest />);
+    expect(await screen.findByText('Which language would you like to use for this chat?')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Write a message…')).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Chat language' }));
+    await user.type(screen.getByRole('searchbox', { name: 'Search languages' }), 'English');
+    await user.click(screen.getByRole('option', { name: /English/ }));
     expect(await screen.findByRole('button', { name: 'What should I know about this event?' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'When does the event start?' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Where is the event taking place?' })).toBeInTheDocument();
@@ -29,6 +40,7 @@ describe('ConciergeWorkspace', () => {
       http.get(historyEndpoint, () =>
         HttpResponse.json({
           id: 'conversation-a',
+          language: 'en',
           messages: [{ id: 'message-a', role: 'CONCIERGE', content: 'Welcome to the event.' }],
         }),
       ),
@@ -78,7 +90,7 @@ describe('ConciergeWorkspace', () => {
 
   it('shows a useful recovery message when Concierge is unavailable', async () => {
     server.use(
-      http.get(historyEndpoint, () => HttpResponse.json({ id: null, messages: [] })),
+      http.get(historyEndpoint, () => HttpResponse.json({ id: 'conversation-a', language: 'en', messages: [] })),
       http.post(streamEndpoint, () =>
         HttpResponse.json(
           {
@@ -95,12 +107,48 @@ describe('ConciergeWorkspace', () => {
     renderApp(<ConciergeWorkspace eventId="event-a" guest />);
 
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText('Write a message…'), 'What starts next?');
+    await user.type(await screen.findByLabelText('Write a message…'), 'What starts next?');
     await user.click(screen.getByRole('button', { name: 'Send message' }));
 
     expect(
       await screen.findByText('Concierge could not respond. Please try again.'),
     ).toBeInTheDocument();
+  });
+
+  it('starts a fresh guest chat without rendering the saved old messages and keeps its language', async () => {
+    server.use(
+      http.get(historyEndpoint, () => HttpResponse.json({ id: 'old-chat', language: 'sq', messages: [
+        { id: 'old-message', role: 'CONCIERGE', content: 'Old answer' },
+      ] })),
+      http.post(chatsEndpoint, async ({ request }) => {
+        expect(await request.json()).toEqual({ language: 'sq' });
+        return HttpResponse.json({ id: 'new-chat', language: 'sq', messages: [] });
+      }),
+    );
+    renderApp(<ConciergeWorkspace eventId="event-a" guest />);
+    expect(await screen.findByText('Old answer')).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'New chat' }));
+    await waitFor(() => expect(screen.queryByText('Old answer')).not.toBeInTheDocument());
+    expect(screen.getByText(/Albanian/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Write a message…')).toBeInTheDocument();
+  });
+
+  it('updates the shown guest language when the guest changes it in chat', async () => {
+    server.use(
+      http.get(historyEndpoint, () => HttpResponse.json({ id: 'chat-a', language: 'en', messages: [] })),
+      http.post(streamEndpoint, () => new HttpResponse([
+        JSON.stringify({ type: 'language', language: 'fr' }),
+        JSON.stringify({ type: 'message', message: {
+          id: 'answer-a', role: 'CONCIERGE', content: 'Bien sûr, je continuerai en français.',
+        } }),
+      ].join('\n'), { headers: { 'Content-Type': 'application/x-ndjson' } })),
+    );
+    renderApp(<ConciergeWorkspace eventId="event-a" guest />);
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText('Write a message…'), 'Please continue in French.');
+    await user.click(screen.getByRole('button', { name: 'Send message' }));
+    expect(await screen.findByText('Bien sûr, je continuerai en français.')).toBeInTheDocument();
+    expect(screen.getByText(/^🇫🇷 French/)).toBeInTheDocument();
   });
 
   it('shows the shareable guest link and QR code inside the organizer conversation', async () => {

@@ -18,10 +18,10 @@ describe('GuestEventPage', () => {
         accessClosesAt: new Date(Date.now() + 7 * 3_600_000).toISOString(),
         timezone: 'Europe/Lisbon', schedule: [],
       })),
-      http.get('http://localhost:3000/api/v1/guest/events/event-a/concierge/messages', () => HttpResponse.json({ messages: [] })),
+      http.get('http://localhost:3000/api/v1/guest/events/event-a/concierge/messages', () => HttpResponse.json({ id: null, language: null, messages: [] })),
     );
     renderApp(<MemoryRouter initialEntries={['/guest/events/event-a']}><Routes><Route path="/guest/events/:eventId" element={<GuestEventPage />} /></Routes></MemoryRouter>);
     expect(await screen.findByRole('heading', { name: 'Leadership Forum' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Write a message…')).toBeInTheDocument();
+    expect(await screen.findByText('Which language would you like to use for this chat?')).toBeInTheDocument();
   });
 });

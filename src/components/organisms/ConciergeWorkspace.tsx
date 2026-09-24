@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, CheckCircle2, Copy, Download, Paperclip, QrCode } from 'lucide-react';
+import { ArrowUp, CheckCircle2, Copy, Download, MessageSquarePlus, Paperclip, QrCode } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../atoms/Button';
@@ -7,13 +7,16 @@ import { Textarea } from '../atoms/Input';
 import { AssistantMessage, TypingIndicator, UserMessage } from '../molecules/ChatMessage';
 import { GuestRowsCard } from './GuestRowsCard';
 import { GuestImportDialog } from '../../features/guests/GuestImportDialog';
+import { guestLanguageLabel, guestLanguageOptions } from '../../features/guest-chat/languages';
 import { downloadGuestTemplate, type GuestImportPreview, type GuestImportRow } from '../../features/guests/guest-import';
 import { apiClient } from '../../lib/api/api-client';
 import { documentKeys, eventKeys, guestKeys, invitationKeys } from '../../lib/api/query-keys';
 import { useEventSocket } from '../../lib/websocket/use-event-socket';
+import { CustomSelect } from '../molecules/CustomSelect';
 
 type Message = { id: string; role: 'USER' | 'CONCIERGE'; content: string; failed?: boolean };
 type ConciergeStreamEvent =
+  | { type: 'language'; language: string }
   | { type: 'status'; messageId: string; status: 'PROCESSING' }
   | { type: 'delta'; messageId: string; delta: string }
   | { type: 'message'; message: Message }
@@ -55,6 +58,7 @@ export function ConciergeWorkspace({
   const [guestPreview, setGuestPreview] = useState<GuestImportPreview | null>(null);
   const [publishWithInvitations, setPublishWithInvitations] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [guestLanguage, setGuestLanguage] = useState<string | null>(null);
   const [hasStreamingText, setHasStreamingText] = useState(false);
   const sharingAccess = Boolean(shareAccess && messages.length === 0);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -67,14 +71,34 @@ export function ConciergeWorkspace({
     queryKey: ['concierge', eventId, guest ? 'guest' : 'organizer'],
     queryFn: ({ signal }) =>
       apiClient.get<{
+        id: string | null;
+        language?: string | null;
         messages: Array<{ id: string; role: 'USER' | 'CONCIERGE'; content: string }>;
       }>(`${guest ? '/guest' : ''}/events/${eventId}/concierge/messages`, signal),
     retry: false,
   });
   useEffect(() => {
-    if (history.data?.messages) setMessages(history.data.messages);
-  }, [history.data]);
+    if (history.data?.messages) {
+      setMessages(history.data.messages);
+      if (guest) setGuestLanguage(history.data.language ?? null);
+    }
+  }, [guest, history.data]);
+  const startGuestChat = useMutation({
+    mutationFn: (language: string) => apiClient.post<{ id: string; language: string; messages: Message[] }>(
+      `/guest/events/${eventId}/concierge/chats`, { language },
+    ),
+    onSuccess: (chat) => {
+      setGuestLanguage(chat.language);
+      setMessages([]);
+      setMessage('');
+      queryClient.setQueryData(['concierge', eventId, 'guest'], chat);
+    },
+  });
   const handleStreamEvent = useCallback((event: ConciergeStreamEvent) => {
+    if (event.type === 'language') {
+      setGuestLanguage(event.language);
+      return;
+    }
     if (event.type === 'status') {
       setHasStreamingText(false);
       return;
@@ -220,7 +244,7 @@ export function ConciergeWorkspace({
   }, [messages, send.isPending, sharingAccess, step, upload.isPending]);
   const submit = () => {
     const content = message.trim();
-    if (!content || send.isPending || publish.isPending) return;
+    if (!content || send.isPending || publish.isPending || startGuestChat.isPending || (guest && !guestLanguage)) return;
     streamErrorShown.current = false;
     setHasStreamingText(false);
     setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'USER', content }]);
@@ -237,6 +261,13 @@ export function ConciergeWorkspace({
           <h2 id="concierge-title" className="font-display text-lg font-semibold">
             {t('title')}
           </h2>
+          {guest && guestLanguage && <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">{guestLanguageLabel(guestLanguage)}</span>
+            <Button type="button" size="sm" variant="secondary" loading={startGuestChat.isPending} disabled={send.isPending || startGuestChat.isPending} onClick={() => startGuestChat.mutate(guestLanguage)}>
+              <MessageSquarePlus className="size-4" />
+              {t('newGuestChat')}
+            </Button>
+          </div>}
           {!guest && socket.enabled && (
             <span
               className={`inline-flex items-center gap-2 text-xs font-semibold ${socket.connected ? 'text-success' : 'text-muted-foreground'}`}
@@ -248,6 +279,9 @@ export function ConciergeWorkspace({
             </span>
           )}
         </div>
+        {guest && guestLanguage && startGuestChat.error && (
+          <p role="alert" className="mt-2 text-xs text-danger">{startGuestChat.error.message}</p>
+        )}
       </header>
       <div
         ref={chatLogRef}
@@ -255,17 +289,35 @@ export function ConciergeWorkspace({
         role="log"
         aria-live="polite"
         aria-label={t('conversation')}
-        aria-busy={history.isLoading || send.isPending || upload.isPending}
+        aria-busy={history.isLoading || send.isPending || upload.isPending || startGuestChat.isPending}
       >
         {history.isLoading && <TypingIndicator label={t('loadingConversation')} />}
-        {!history.isLoading && messages.length === 0 && !sharingAccess && (
+        {!history.isLoading && guest && !guestLanguage && (
+          <AssistantMessage wide>
+            <div className="space-y-3">
+              <p className="text-sm font-semibold">{t('chooseGuestLanguage')}</p>
+              <CustomSelect
+                value=""
+                label={t('guestLanguageLabel')}
+                options={[{ value: '', label: t('selectGuestLanguage') }, ...guestLanguageOptions]}
+                onChange={(language) => { if (language) startGuestChat.mutate(language); }}
+                searchable
+                searchPlaceholder={t('searchGuestLanguage')}
+                disabled={startGuestChat.isPending}
+                className="max-w-sm"
+              />
+              {startGuestChat.error && <p role="alert" className="text-sm text-danger">{startGuestChat.error.message}</p>}
+            </div>
+          </AssistantMessage>
+        )}
+        {!history.isLoading && messages.length === 0 && !sharingAccess && (!guest || guestLanguage) && (
           <>
-            <AssistantMessage>
+            {(!guest || guestLanguage === 'en') && <AssistantMessage>
               <p className="text-sm leading-6">
                 {guest ? t('guestWelcome') : t('organizerWelcome')}
               </p>
-            </AssistantMessage>
-            <div className="ml-10 flex flex-wrap gap-2">
+            </AssistantMessage>}
+            {(!guest || guestLanguage === 'en') && <div className="ml-10 flex flex-wrap gap-2">
               {(guest
                 ? [
                     t('guestSuggestionOverview'),
@@ -286,10 +338,10 @@ export function ConciergeWorkspace({
                   {suggestion}
                 </button>
               ))}
-            </div>
+            </div>}
           </>
         )}
-        {messages.map((item, index) =>
+        {(!guest || guestLanguage) && messages.map((item, index) =>
           item.role === 'USER' ? (
             <UserMessage key={item.id}>
               <p className="whitespace-pre-wrap">{item.content}</p>
@@ -416,7 +468,7 @@ export function ConciergeWorkspace({
           </AssistantMessage>
         )}
       </div>
-      <form
+      {(!guest || guestLanguage) && <form
         className="border-t border-border bg-surface p-3 sm:p-4"
         onSubmit={(event) => {
           event.preventDefault();
@@ -444,7 +496,7 @@ export function ConciergeWorkspace({
             rows={1}
             placeholder={t('placeholder')}
             maxLength={4_000}
-            disabled={send.isPending || publish.isPending}
+            disabled={send.isPending || publish.isPending || startGuestChat.isPending}
           />
           <div className="flex items-center gap-2 border-t border-border/70 px-1 pt-2">
             {!guest && allowUpload ? (
@@ -482,7 +534,7 @@ export function ConciergeWorkspace({
               type="submit"
               size="sm"
               className="size-10 min-h-10 shrink-0 rounded-full px-0"
-              disabled={!message.trim() || send.isPending || publish.isPending}
+              disabled={!message.trim() || send.isPending || publish.isPending || startGuestChat.isPending}
               aria-label={t('send')}
               title={t('send')}
             >
@@ -491,7 +543,7 @@ export function ConciergeWorkspace({
             </Button>
           </div>
         </div>
-      </form>
+      </form>}
     </section>
   );
 }
