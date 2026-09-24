@@ -317,6 +317,7 @@ export const en = {
     editEvent: 'Edit event',
     viewDetails: 'View details',
     viewDetailsAndEdit: 'View details and edit',
+    staffReadOnlyEvent: 'View only. You can see this event, but only its creator or an admin can change it.',
     location: 'Location',
     dateRange: 'Date range',
     organizer: 'Organizer',

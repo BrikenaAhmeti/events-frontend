@@ -141,7 +141,7 @@ describe('EventsPage event actions', () => {
     expect(screen.getAllByText('Upcoming')).not.toHaveLength(0);
   });
 
-  it('keeps details available without showing edit to read-only staff', async () => {
+  it('keeps another creator’s event view-only even when staff have edit and delete permissions', async () => {
     server.use(
       http.get(`${api}/auth/me`, () =>
         HttpResponse.json({
@@ -151,14 +151,14 @@ describe('EventsPage event actions', () => {
           lastName: 'Staff',
           platformRole: null,
           memberships: [
-            { clientId: 'client-a', role: 'CLIENT_STAFF', status: 'ACTIVE', permissions: [] },
+            { clientId: 'client-a', role: 'CLIENT_STAFF', status: 'ACTIVE', permissions: ['EVENT_EDIT', 'EVENT_DELETE'] },
           ],
         }),
       ),
       http.get(`${api}/events/directory/creators`, () => HttpResponse.json([])),
       http.get(`${api}/events`, () =>
         HttpResponse.json({
-          items: [{ ...event, capabilities: { ...event.capabilities, canEdit: false } }],
+          items: [{ ...event, capabilities: { ...event.capabilities, canEdit: false, canDelete: false, canCancel: false } }],
           pageInfo: { hasNextPage: false, endCursor: null },
         }),
       ),
@@ -172,9 +172,11 @@ describe('EventsPage event actions', () => {
 
     expect(await screen.findAllByRole('link', { name: 'View details' })).toHaveLength(2);
     expect(screen.queryByRole('link', { name: 'Edit event' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel event' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete event' })).not.toBeInTheDocument();
   });
 
-  it('shows edit to staff who can edit events', async () => {
+  it('shows edit, cancel, and delete for a staff member’s own event', async () => {
     server.use(
       http.get(`${api}/auth/me`, () =>
         HttpResponse.json({
@@ -184,14 +186,14 @@ describe('EventsPage event actions', () => {
           lastName: 'Staff',
           platformRole: null,
           memberships: [
-            { clientId: 'client-a', role: 'CLIENT_STAFF', status: 'ACTIVE', permissions: ['EVENT_EDIT'] },
+            { clientId: 'client-a', role: 'CLIENT_STAFF', status: 'ACTIVE', permissions: ['EVENT_EDIT', 'EVENT_DELETE'] },
           ],
         }),
       ),
       http.get(`${api}/events/directory/creators`, () => HttpResponse.json([])),
       http.get(`${api}/events`, () =>
         HttpResponse.json({
-          items: [event],
+          items: [{ ...event, createdBy: { ...event.createdBy, id: 'staff-a' } }],
           pageInfo: { hasNextPage: false, endCursor: null },
         }),
       ),
@@ -204,6 +206,8 @@ describe('EventsPage event actions', () => {
     );
 
     expect(await screen.findAllByRole('link', { name: 'Edit event' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Cancel event' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Delete event' })).toHaveLength(2);
   });
 });
 

@@ -62,4 +62,30 @@ describe('EventOverviewPage editing', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('textbox', { name: 'Description and purpose' })).not.toBeInTheDocument();
   });
+
+  it('does not open editing for staff viewing another creator’s event', async () => {
+    server.use(
+      http.get('http://localhost:3000/api/v1/auth/me', () => HttpResponse.json({
+        userId: 'staff-a', email: 'staff@example.test', firstName: 'Alex', lastName: 'Staff', platformRole: null,
+        memberships: [{ clientId: 'client-a', role: 'CLIENT_STAFF', status: 'ACTIVE', permissions: ['EVENT_EDIT'] }],
+      })),
+    );
+
+    renderApp(
+      <MemoryRouter initialEntries={['/app/events/event-a?edit=1']}>
+        <Routes>
+          <Route path="/app/events/:eventId" element={<Outlet context={{ event: {
+            ...event,
+            capabilities: { ...event.capabilities, canEdit: false, canPublish: false },
+          } }} />}>
+            <Route index element={<EventOverviewPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('A leadership forum')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Description and purpose' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit event' })).not.toBeInTheDocument();
+  });
 });

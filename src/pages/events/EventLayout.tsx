@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, FileText, LayoutDashboard, Link2, MessageCircle, Users } from 'lucide-react';
+import { CalendarDays, Eye, FileText, LayoutDashboard, Link2, MessageCircle, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, useParams } from 'react-router-dom';
 import { Skeleton } from '../../components/atoms/Skeleton';
@@ -30,6 +30,14 @@ export function EventLayout() {
       </div>
     );
   if (!event.data) return null;
+  const staffViewingAnotherEvent = Boolean(
+    user?.platformRole !== 'SUPER_ADMIN' &&
+    user?.memberships.some((membership) =>
+      membership.clientId === event.data.clientId &&
+      membership.status === 'ACTIVE' &&
+      membership.role === 'CLIENT_STAFF') &&
+    event.data.createdBy.id !== user?.userId,
+  );
   const tabs = [
     ['', t('overview'), LayoutDashboard, 'EVENT_READ'],
     ['concierge', t('concierge'), MessageCircle, 'EVENT_READ'],
@@ -71,6 +79,12 @@ export function EventLayout() {
           </div>
         </div>
       </header>
+      {staffViewingAnotherEvent && (
+        <p className="mt-3 flex items-start gap-2 rounded-xl border border-info/35 bg-info/10 p-3 text-sm font-medium text-foreground">
+          <Eye className="mt-0.5 size-4 shrink-0 text-info" aria-hidden />
+          {t('staffReadOnlyEvent')}
+        </p>
+      )}
       <nav
         aria-label={t('workspaceLabel')}
         className="my-4 grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1 sm:grid-cols-3 xl:grid-cols-6"
