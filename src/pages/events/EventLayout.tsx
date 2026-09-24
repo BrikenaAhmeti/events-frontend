@@ -40,17 +40,17 @@ export function EventLayout() {
   ] as const;
   return (
     <div>
-      <header className="rounded-2xl border border-border bg-surface p-5 sm:p-7">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-          <div>
+      <header className="rounded-2xl border border-border bg-surface p-4 sm:p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-[0.17em] text-primary">
               {t(`categories.${event.data.category}`)}
             </p>
-            <h1 className="mt-2 font-display text-4xl tracking-tight sm:text-5xl">
+            <h1 className="mt-1 break-words font-display text-3xl leading-tight tracking-tight">
               {event.data.name}
             </h1>
-            <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-              <CalendarDays className="size-4" />
+            <p className="mt-2 flex items-start gap-2 text-sm text-muted-foreground">
+              <CalendarDays className="mt-0.5 size-4 shrink-0" />
               {event.data.startAt
                 ? new Intl.DateTimeFormat('en', {
                     dateStyle: 'long',
@@ -60,7 +60,7 @@ export function EventLayout() {
               · {event.data.destination ?? event.data.venue ?? t('locationPending')}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             <StatusBadge status={event.data.status} />
             <StatusBadge status={event.data.operationalStatus} />
             <span className="text-sm font-bold tabular-nums">
@@ -71,7 +71,7 @@ export function EventLayout() {
       </header>
       <nav
         aria-label={t('workspaceLabel')}
-        className="my-5 grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1 sm:grid-cols-3 xl:grid-cols-6"
+        className="my-4 grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1 sm:grid-cols-3 xl:grid-cols-6"
       >
         {tabs
           .filter(([, , , permission]) => user && can(user, permission, event.data.clientId))

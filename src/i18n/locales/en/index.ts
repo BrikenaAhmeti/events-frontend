@@ -173,7 +173,7 @@ export const en = {
     reviewEventInformation: 'Review event information',
     sendSetupMessage: 'Send message',
     setupWelcomeFallback:
-      'Tell me what you know about the event, including dates, location, organizer, and guests. You can attach an event document too.',
+      'First, tell me the event purpose, type, and name if you have one. You can add other details or attach a file. I’ll show a separate date step after the basics.',
     setupStartInvalidResponse: 'The setup conversation could not be opened. Please try again.',
     reviewCompleteMessage:
       'I’ve reviewed what you shared and organized it into the event details below.',
@@ -208,7 +208,7 @@ export const en = {
     chatReviewReady: 'Everything required is ready. You can create the workspace or tell me what to change.',
     chatKeepAnswering: 'Keep answering in the chat. I’ll ask for the next related group of details.',
     basicsChatPlaceholder: 'Name, short description, event type — separated by commas',
-    datesChatPlaceholder: 'Add the event start and end dates, times, and timezone…',
+    datesChatPlaceholder: 'Use the date controls above, or add context here…',
     eventDateTimeRange: 'Choose event dates and times',
     eventDateTimeHelp: 'One day or a longer event? Choose the dates, then set the start and finish.',
     eventDates: 'Event dates',
@@ -449,6 +449,7 @@ export const en = {
     email: 'Email',
     company: 'Company',
     group: 'Guest group',
+    actions: 'Actions',
     empty: 'No guests have been added yet.',
     preview: 'Import preview',
     accepted: '{{count}} guests ready',

@@ -2,6 +2,44 @@ import { expect, test } from '@playwright/test';
 
 const api = 'http://localhost:3000/api/v1';
 
+test('a new setup asks for basics first and then opens its own date step', async ({ page }) => {
+  await page.route(`${api}/**`, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/auth/me')) return route.fulfill({ json: {
+      userId: 'admin-a', email: 'admin@example.test', firstName: 'Elena', lastName: 'Hart',
+      platformRole: null,
+      memberships: [{ clientId: 'client-a', role: 'CLIENT_ADMIN', status: 'ACTIVE', permissions: [] }],
+    } });
+    if (url.pathname.endsWith('/clients')) return route.fulfill({ json: {
+      items: [{ id: 'client-a', name: 'Northstar Events', slug: 'northstar' }],
+    } });
+    if (url.pathname.endsWith('/auth/csrf')) return route.fulfill({ json: { csrfToken: 'e2e.csrf' } });
+    if (url.pathname.endsWith('/events/setup/start')) return route.fulfill({ json: {
+      sessionId: 'setup-a', clientId: 'client-a', clientName: 'Northstar Events', resumed: false,
+      message: 'First, tell me its purpose, event type, and name if you have one. After the basics, I’ll show a separate date step with a calendar and time controls.',
+      draft: { event: {}, facts: [], schedule: [], guests: [], nameWasProvided: false },
+    } });
+    if (url.pathname.endsWith('/events/setup/analyze')) return route.fulfill({ json: {
+      sessionId: 'setup-a',
+      message: 'Next, choose one date or a date range, the start and end times, and the event timezone in the date step below.',
+      event: { name: 'Leadership Forum', category: 'CONFERENCE', description: 'An annual leadership gathering.' },
+      nameWasProvided: true, facts: [], schedule: [], guests: [], extractedFacts: 0,
+      extractedScheduleItems: 0, file: null,
+    } });
+    return route.fulfill({ status: 404, json: { code: 'UNMOCKED_BROWSER_REQUEST' } });
+  });
+
+  await page.goto('/app/events/new?clientId=client-a');
+  await expect(page.getByText(/First, tell me its purpose, event type/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Event dates:/ })).toHaveCount(0);
+  await page.getByLabel('Event information').fill('Leadership Forum, conference for company directors');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.getByText(/choose one date or a date range/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Event dates:/ })).toBeVisible();
+  await expect(page.getByLabel('Event information')).toHaveAttribute('placeholder',
+    'Use the date controls above, or add context here…');
+});
+
 for (const mode of ['single', 'range'] as const) {
   test(`event chat saves a ${mode} date with custom time and timezone controls`, async ({
     page,

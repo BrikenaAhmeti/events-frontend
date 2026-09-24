@@ -6,7 +6,7 @@ export function CompletenessPanel({ completeness }: { completeness: EventComplet
   const { t } = useTranslation('events');
   return (
     <section
-      className="rounded-xl border border-border bg-surface p-5"
+      className="rounded-xl border border-border bg-surface p-4"
       aria-labelledby="readiness-title"
     >
       <div className="flex items-start justify-between gap-4">
@@ -14,19 +14,19 @@ export function CompletenessPanel({ completeness }: { completeness: EventComplet
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
             {t('readiness')}
           </p>
-          <h2 id="readiness-title" className="mt-2 font-display text-2xl">
+          <h2 id="readiness-title" className="mt-1 font-display text-lg">
             {completeness.ready ? t('ready') : t('missing', { count: completeness.missing.length })}
           </h2>
         </div>
-        <span className="font-display text-4xl text-primary">{completeness.score}%</span>
+        <span className="font-display text-2xl text-primary">{completeness.score}%</span>
       </div>
-      <div className="mt-5 h-2 overflow-hidden rounded-full bg-muted">
+      <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
         <div
           className="h-full rounded-full bg-primary transition-all"
           style={{ width: `${completeness.score}%` }}
         />
       </div>
-      <div className="mt-5 space-y-2">
+      <div className="mt-4 space-y-2">
         {completeness.missing.map((field) => (
           <p key={field} className="flex items-center gap-2 text-sm text-muted-foreground">
             <AlertCircle className="size-4 text-warning" />

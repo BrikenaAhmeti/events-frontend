@@ -466,7 +466,7 @@ describe('CreateEventPage platform administrator flow', () => {
     await userEvent.click(screen.getByRole('option', { name: 'Northstar Events' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
     expect(await screen.findByText('This is an unfinished conference.')).toBeInTheDocument();
-    expect(await screen.findByPlaceholderText('Add the event start and end dates, times, and timezone…')).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('Use the date controls above, or add context here…')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'New chat' }));
 
@@ -474,7 +474,7 @@ describe('CreateEventPage platform administrator flow', () => {
     expect(screen.getByRole('button', { name: 'Save and continue' })).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'New chat' })).not.toBeInTheDocument();
     expect(screen.queryByText('This is an unfinished conference.')).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('Add the event start and end dates, times, and timezone…')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Use the date controls above, or add context here…')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Event information')).toBeDisabled();
     expect(starts).toBe(1);
 
@@ -573,7 +573,7 @@ describe('CreateEventPage platform administrator flow', () => {
     expect(screen.getByRole('button', { name: 'Download Plain text template' })).toBeInTheDocument();
   });
 
-  it('accepts event dates as another message in the setup conversation', async () => {
+  it('shows a separate date picker after the event basics', async () => {
     const setupRequests: FormData[] = [];
     server.use(
       http.get(`${api}/auth/me`, () =>
@@ -601,7 +601,7 @@ describe('CreateEventPage platform administrator flow', () => {
             {
               id: 'welcome-a',
               role: 'CONCIERGE',
-              content: 'Start with the event name, description, and type.',
+              content: 'Start with the event name, description, and type. I’ll show a separate date step with a calendar after the basics.',
             },
           ],
           draft: {
@@ -614,17 +614,21 @@ describe('CreateEventPage platform administrator flow', () => {
         }),
       ),
       http.post(`${api}/events/setup/analyze`, async ({ request }) => {
-        setupRequests.push(await request.formData());
+        const fields = await request.formData();
+        setupRequests.push(fields);
         return HttpResponse.json({
           sessionId: 'setup-a',
           message:
             setupRequests.length === 1
-              ? 'What are the start and end dates and times, and which timezone should I use?'
+              ? 'Next, choose one date or a date range in the date step below.'
               : 'Now add the location.',
           event: {
             name: 'Leadership Forum',
             category: 'CONFERENCE',
             description: 'An annual leadership forum for company directors.',
+            ...(setupRequests.length > 1 ? {
+              startAt: fields.get('startAt'), endAt: fields.get('endAt'), timezone: fields.get('timezone'),
+            } : {}),
           },
           suggestedName: 'Leadership Forum',
           nameWasProvided: true,
@@ -653,6 +657,8 @@ describe('CreateEventPage platform administrator flow', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Client' }));
     await userEvent.click(screen.getByRole('option', { name: 'Northstar Events' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
+    expect(await screen.findByText(/separate date step with a calendar after the basics/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Event dates:/ })).not.toBeInTheDocument();
     const composer = screen.getByLabelText('Event information');
     await userEvent.type(
       composer,
@@ -660,13 +666,28 @@ describe('CreateEventPage platform administrator flow', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
-    expect(await screen.findByText('What are the start and end dates and times, and which timezone should I use?')).toBeInTheDocument();
+    expect(await screen.findByText('Next, choose one date or a date range in the date step below.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Event dates:/ })).toBeInTheDocument();
+    expect(composer).toHaveAttribute('placeholder', 'Use the date controls above, or add context here…');
     expect(screen.queryByLabelText('Live event brief')).not.toBeInTheDocument();
 
-    await userEvent.type(composer, 'October 12, 2027 at 9 AM to October 12, 2027 at 6 PM, Europe/Lisbon');
-    await userEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Event dates:/ }));
+    const day = new Intl.DateTimeFormat('en', {
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+    }).format(new Date());
+    await userEvent.click(screen.getByRole('gridcell', { name: day }));
+    await userEvent.type(screen.getByLabelText('Start time'), '09:00');
+    await userEvent.type(screen.getByLabelText('End time'), '18:00');
+    await userEvent.click(screen.getByRole('button', { name: 'Event timezone' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search city or timezone' }), 'UTC');
+    await userEvent.click(screen.getByRole('option', { name: /^UTC$/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Use these dates' }));
 
     await waitFor(() => expect(setupRequests).toHaveLength(2));
-    expect(setupRequests[1]?.get('text')).toBe('October 12, 2027 at 9 AM to October 12, 2027 at 6 PM, Europe/Lisbon');
+    expect(setupRequests[1]?.get('timezone')).toBe('UTC');
+    expect(setupRequests[1]?.get('startAt')).toEqual(expect.stringMatching(/T09:00:00\.000Z$/));
+    expect(setupRequests[1]?.get('endAt')).toEqual(expect.stringMatching(/T18:00:00\.000Z$/));
+    expect(await screen.findByText('Now add the location.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Event dates:/ })).not.toBeInTheDocument();
   });
 });

@@ -50,6 +50,7 @@ export function ConciergeWorkspace({
   const [guestRowsPending, setGuestRowsPending] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasStreamingText, setHasStreamingText] = useState(false);
+  const sharingAccess = Boolean(shareAccess && messages.length === 0);
   const fileRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const chatLogRef = useRef<HTMLDivElement>(null);
@@ -192,8 +193,10 @@ export function ConciergeWorkspace({
   });
   useEffect(() => {
     const chatLog = chatLogRef.current;
-    if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
-  }, [messages, send.isPending, shareAccess, step, upload.isPending]);
+    if (chatLog) {
+      chatLog.scrollTop = sharingAccess ? 0 : chatLog.scrollHeight;
+    }
+  }, [messages, send.isPending, sharingAccess, step, upload.isPending]);
   const submit = () => {
     const content = message.trim();
     if (!content || send.isPending || publish.isPending) return;
@@ -205,19 +208,14 @@ export function ConciergeWorkspace({
   };
   return (
     <section
-      className="flex h-[clamp(36rem,72dvh,52rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm"
+      className={`flex flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm ${sharingAccess ? 'min-h-[clamp(36rem,72dvh,52rem)] lg:h-[clamp(36rem,72dvh,52rem)]' : 'h-[clamp(36rem,72dvh,52rem)]'}`}
       aria-labelledby="concierge-title"
     >
-      <header className="border-b border-border bg-surface-sunken/45 px-4 py-3.5 sm:px-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">
-              {t('eyebrow')}
-            </p>
-            <h2 id="concierge-title" className="mt-1 font-display text-2xl">
-              {t('title')}
-            </h2>
-          </div>
+      <header className="border-b border-border bg-surface-sunken/45 px-4 py-3 sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="concierge-title" className="font-display text-lg font-semibold">
+            {t('title')}
+          </h2>
           {!guest && socket.enabled && (
             <span
               className={`inline-flex items-center gap-2 text-xs font-semibold ${socket.connected ? 'text-success' : 'text-muted-foreground'}`}
@@ -232,14 +230,14 @@ export function ConciergeWorkspace({
       </header>
       <div
         ref={chatLogRef}
-        className="flex-1 space-y-5 overflow-y-auto bg-surface-sunken/20 p-4 sm:p-6"
+        className={`flex-1 space-y-5 bg-surface-sunken/20 p-4 sm:p-6 ${sharingAccess ? 'overflow-visible lg:overflow-y-auto' : 'overflow-y-auto'}`}
         role="log"
         aria-live="polite"
         aria-label={t('conversation')}
         aria-busy={history.isLoading || send.isPending || upload.isPending}
       >
         {history.isLoading && <TypingIndicator label={t('loadingConversation')} />}
-        {!history.isLoading && messages.length === 0 && (
+        {!history.isLoading && messages.length === 0 && !sharingAccess && (
           <>
             <AssistantMessage>
               <p className="text-sm leading-6">
@@ -337,7 +335,7 @@ export function ConciergeWorkspace({
         )}
         {shareAccess && (
           <AssistantMessage wide>
-            <div className="w-full max-w-xl">
+            <div className="w-full">
               <div className="flex items-center gap-2 font-semibold">
                 <QrCode className="size-5 text-primary" />
                 {t('guestAccessReady')}
@@ -345,39 +343,43 @@ export function ConciergeWorkspace({
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
                 {t('guestAccessReadyDescription')}
               </p>
-              <img
-                className="mx-auto mt-4 size-48 rounded-xl border border-border bg-white p-2"
-                src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(shareAccess.qrSvg)}`}
-                alt={t('guestAccessQr')}
-              />
-              <p className="mt-4 break-all rounded-lg bg-surface-sunken p-3 text-xs">
-                {shareAccess.url}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => void navigator.clipboard.writeText(shareAccess.url)}
-                >
-                  <Copy className="size-4" />
-                  {t('copyGuestLink')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(
-                      new Blob([shareAccess.qrSvg], { type: 'image/svg+xml' }),
-                    );
-                    link.download = 'event-guest-qr.svg';
-                    link.click();
-                    URL.revokeObjectURL(link.href);
-                  }}
-                >
-                  <Download className="size-4" />
-                  {t('downloadGuestQr')}
-                </Button>
+              <div className="mt-3 grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
+                <img
+                  className="size-40 rounded-xl border border-border bg-white p-2"
+                  src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(shareAccess.qrSvg)}`}
+                  alt={t('guestAccessQr')}
+                />
+                <div className="min-w-0">
+                  <p className="break-all rounded-lg bg-surface-sunken p-3 text-xs">
+                    {shareAccess.url}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void navigator.clipboard.writeText(shareAccess.url)}
+                    >
+                      <Copy className="size-4" />
+                      {t('copyGuestLink')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(
+                          new Blob([shareAccess.qrSvg], { type: 'image/svg+xml' }),
+                        );
+                        link.download = 'event-guest-qr.svg';
+                        link.click();
+                        URL.revokeObjectURL(link.href);
+                      }}
+                    >
+                      <Download className="size-4" />
+                      {t('downloadGuestQr')}
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
           </AssistantMessage>

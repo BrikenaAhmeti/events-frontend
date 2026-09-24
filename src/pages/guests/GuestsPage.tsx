@@ -58,6 +58,9 @@ export function GuestsPage() {
   const mayRead = Boolean(user && can(user, 'GUEST_READ', event.clientId));
   const mayManage = Boolean(user && (event.capabilities.canManageGuests ?? event.capabilities.canEdit) && can(user, 'GUEST_MANAGE', event.clientId));
   const mayImport = Boolean(user && (event.capabilities.canImportGuests ?? event.capabilities.canEdit) && can(user, 'GUEST_IMPORT', event.clientId));
+  const guestColumns = mayManage
+    ? 'md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.7fr)_9rem]'
+    : 'md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,0.7fr)]';
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const importInput = useRef<HTMLInputElement>(null);
@@ -127,24 +130,24 @@ export function GuestsPage() {
       </div>
       {guests.data?.items.length ? (
         <div className="overflow-hidden rounded-xl border border-border bg-surface">
-          <div className="hidden grid-cols-[minmax(0,1.3fr)_minmax(0,1.5fr)_1fr_0.7fr_auto] gap-4 border-b border-border px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground md:grid">
+          <div className={`hidden gap-4 border-b border-border px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground md:grid ${guestColumns}`}>
             <span>{t('fullName')}</span>
             <span>{t('email')}</span>
             <span>{t('company')}</span>
             <span>{t('group')}</span>
-            <span />
+            {mayManage && <span className="text-right">{t('actions')}</span>}
           </div>
           {guests.data.items.map((guest) => (
             <article
               key={guest.id}
-              className="grid gap-1 border-b border-border px-5 py-4 last:border-0 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.5fr)_1fr_0.7fr_auto] md:items-center md:gap-4"
+              className={`grid gap-1 border-b border-border px-5 py-4 last:border-0 md:items-center md:gap-4 ${guestColumns}`}
             >
               <p className="font-semibold">{guest.fullName}</p>
               <p className="truncate text-sm text-muted-foreground">{guest.email}</p>
               <p className="text-sm text-muted-foreground">{guest.company ?? '—'}</p>
               <p className="text-sm text-muted-foreground">{guest.guestGroup ?? '—'}</p>
               {mayManage && (
-                <Button size="sm" variant="quiet" onClick={() => setEditTarget(guest)}>
+                <Button size="sm" variant="quiet" className="md:justify-self-end" onClick={() => setEditTarget(guest)}>
                   <PencilLine className="size-4" />
                   {t('edit')}
                 </Button>
