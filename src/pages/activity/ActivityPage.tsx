@@ -252,16 +252,18 @@ export function ActivityPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                      {t('teamMember')}
+                      {t('performedBy')}
                     </p>
                     <p className="mt-1 truncate text-sm font-semibold">
                       {entry.actor
                         ? `${entry.actor.firstName} ${entry.actor.lastName}`
                         : t('system')}
                     </p>
-                    {entry.actor && (
+                    {entry.actor?.platformRole === 'SUPER_ADMIN' ? (
+                      <p className="text-xs text-muted-foreground">{t('superAdmin')}</p>
+                    ) : entry.actor?.platformRole === null && entry.actor.email ? (
                       <p className="truncate text-xs text-muted-foreground">{entry.actor.email}</p>
-                    )}
+                    ) : null}
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">

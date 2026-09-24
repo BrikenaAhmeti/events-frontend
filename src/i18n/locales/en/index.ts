@@ -599,6 +599,8 @@ export const en = {
     allClients: 'All clients',
     allManagedClients: 'All managed clients',
     teamMember: 'Team member',
+    performedBy: 'Performed by',
+    superAdmin: 'Super admin',
     allTeamMembers: 'All team members',
     action: 'Action',
     allActions: 'All actions',

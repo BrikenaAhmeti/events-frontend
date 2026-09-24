@@ -118,7 +118,8 @@ export type AuditLogEntry = {
     id: string;
     firstName: string;
     lastName: string;
-    email: string;
+    email: string | null;
+    platformRole: 'SUPER_ADMIN' | null;
   } | null;
   client: { id: string; name: string } | null;
   event: { id: string; name: string } | null;
@@ -128,7 +129,6 @@ export type AuditActor = {
   id: string;
   firstName: string;
   lastName: string;
-  email: string;
   role: 'CLIENT_ADMIN' | 'CLIENT_STAFF';
 };
 

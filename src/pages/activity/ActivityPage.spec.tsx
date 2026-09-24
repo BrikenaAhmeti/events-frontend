@@ -54,7 +54,6 @@ describe('ActivityPage', () => {
             id: '4367d4d4-43e2-49ef-a882-ab0135640506',
             firstName: 'Jamie',
             lastName: 'Lee',
-            email: 'jamie@example.test',
             role: 'CLIENT_STAFF',
           },
         ]),
@@ -77,6 +76,7 @@ describe('ActivityPage', () => {
                 firstName: 'Jamie',
                 lastName: 'Lee',
                 email: 'jamie@example.test',
+                platformRole: null,
               },
               client: {
                 id: '041a6048-cd9a-47cd-8267-c6ac436ed70c',
@@ -105,6 +105,35 @@ describe('ActivityPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Team member' }));
     await userEvent.click(await screen.findByRole('option', { name: 'Jamie Lee' }));
     await waitFor(() => expect(actorFilter).toBe('4367d4d4-43e2-49ef-a882-ab0135640506'));
+  });
+
+  it('identifies a super admin without showing their email address', async () => {
+    server.use(
+      http.get(`${api}/auth/me`, () => HttpResponse.json(administrator)),
+      http.get(`${api}/audit-logs/directory/clients`, () => HttpResponse.json([])),
+      http.get(`${api}/audit-logs/directory/actors`, () => HttpResponse.json([])),
+      http.get(`${api}/audit-logs/directory/actions`, () => HttpResponse.json([])),
+      http.get(`${api}/audit-logs`, () => HttpResponse.json({
+        items: [{
+          id: 'log-a', action: 'INVITATIONS_REQUESTED', entityType: 'Event', entityId: 'event-a',
+          requestId: 'request-a', metadata: {}, createdAt: '2026-09-24T21:37:00.000Z',
+          actor: { id: 'super-a', firstName: 'Mara', lastName: 'Ellis',
+            email: null, platformRole: 'SUPER_ADMIN' },
+          client: { id: 'client-a', name: 'Northstar Event' },
+          event: { id: 'event-a', name: 'Global Leadership Forum' },
+        }],
+        pageInfo: { hasNextPage: false, endCursor: null },
+      })),
+    );
+
+    renderPage();
+
+    const actorRow = (await screen.findByText('Mara Ellis')).closest('article');
+    expect(actorRow).toBeInTheDocument();
+    expect(screen.getByText('Performed by')).toBeInTheDocument();
+    expect(actorRow).toHaveTextContent('Super admin');
+    expect(actorRow).not.toHaveTextContent('Team member');
+    expect(screen.queryByText('super.admin@example.test')).not.toBeInTheDocument();
   });
 
   it('redirects client staff away from the administrator history', async () => {
