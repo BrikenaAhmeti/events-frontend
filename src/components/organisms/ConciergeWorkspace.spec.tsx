@@ -9,6 +9,17 @@ const historyEndpoint = 'http://localhost:3000/api/v1/guest/events/event-a/conci
 const streamEndpoint = 'http://localhost:3000/api/v1/guest/events/event-a/concierge/stream';
 
 describe('ConciergeWorkspace', () => {
+  it('offers guest questions that fit any event', async () => {
+    server.use(
+      http.get(historyEndpoint, () => HttpResponse.json({ messages: [] })),
+    );
+    renderApp(<ConciergeWorkspace eventId="event-a" guest />);
+    expect(await screen.findByRole('button', { name: 'What should I know about this event?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'When does the event start?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Where is the event taking place?' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'What time is dinner?' })).not.toBeInTheDocument();
+  });
+
   it('loads history and renders a streamed guest answer', async () => {
     let releaseResponse: (() => void) | undefined;
     const holdResponse = new Promise<void>((resolve) => {

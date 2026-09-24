@@ -268,9 +268,9 @@ export function ConciergeWorkspace({
             <div className="ml-10 flex flex-wrap gap-2">
               {(guest
                 ? [
-                    t('guestSuggestionToday'),
-                    t('guestSuggestionMeet'),
-                    t('guestSuggestionDinner'),
+                    t('guestSuggestionOverview'),
+                    t('guestSuggestionWhen'),
+                    t('guestSuggestionWhere'),
                   ]
                 : [t('organizerSuggestionPlan'), t('organizerSuggestionMissing')]
               ).map((suggestion) => (
