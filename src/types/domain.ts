@@ -67,6 +67,11 @@ export type EventSummary = {
   createdBy: { id: string; firstName: string; lastName: string; email: string };
   capabilities: {
     canEdit: boolean;
+    canManageGuests?: boolean;
+    canImportGuests?: boolean;
+    canSendInvitations?: boolean;
+    canRevokeInvitations?: boolean;
+    canPublish?: boolean;
     canUploadDocuments?: boolean;
     canDelete: boolean;
     canCancel: boolean;

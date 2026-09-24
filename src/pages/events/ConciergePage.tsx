@@ -28,8 +28,8 @@ export function ConciergePage() {
         ready={event.completeness.ready}
         guestCount={event._count.guests}
         allowPlanning={Boolean(user && event.capabilities.canEdit && can(user, 'EVENT_EDIT', event.clientId))}
-        allowGuestManage={Boolean(user && event.capabilities.canEdit && can(user, 'GUEST_MANAGE', event.clientId))}
-        allowPublish={Boolean(user && event.capabilities.canEdit && can(user, 'EVENT_PUBLISH', event.clientId))}
+        allowGuestManage={Boolean(user && (event.capabilities.canManageGuests ?? event.capabilities.canEdit) && can(user, 'GUEST_MANAGE', event.clientId))}
+        allowPublish={Boolean(user && (event.capabilities.canPublish ?? event.capabilities.canEdit) && can(user, 'EVENT_PUBLISH', event.clientId))}
         allowUpload={Boolean(
           user && can(user, 'DOCUMENT_UPLOAD', event.clientId) &&
           (event.capabilities.canUploadDocuments ?? event.capabilities.canEdit),

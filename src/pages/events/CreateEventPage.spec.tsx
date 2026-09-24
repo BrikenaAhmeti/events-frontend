@@ -9,6 +9,62 @@ import { CreateEventPage } from './CreateEventPage';
 const api = 'http://localhost:3000/api/v1';
 
 describe('CreateEventPage platform administrator flow', () => {
+  it.each([
+    ['SUPER_ADMIN', 'accept'], ['SUPER_ADMIN', 'reject'],
+    ['CLIENT_ADMIN', 'accept'], ['CLIENT_ADMIN', 'reject'],
+    ['CLIENT_STAFF', 'accept'], ['CLIENT_STAFF', 'reject'],
+  ])('lets %s %s a suggested name in the same setup chat', async (role, decision) => {
+    const eventDetails = {
+      category: 'CONFERENCE', description: 'An annual leadership gathering.', destination: 'Lisbon',
+      startAt: '2027-10-12T08:00:00.000Z', endAt: '2027-10-12T18:00:00.000Z',
+      timezone: 'Europe/Lisbon', organizerName: 'Morgan Reed', organizerEmail: 'morgan@example.test',
+    };
+    const requests: FormData[] = [];
+    const client = { id: 'client-a', name: 'Northstar Events', slug: 'northstar', status: 'ACTIVE' };
+    server.use(
+      http.get(`${api}/auth/me`, () => HttpResponse.json({
+        userId: 'creator-a', email: 'creator@example.test', firstName: 'Event', lastName: 'Creator',
+        platformRole: role === 'SUPER_ADMIN' ? role : null,
+        memberships: role === 'SUPER_ADMIN' ? [] : [{ clientId: client.id, role, status: 'ACTIVE', permissions: ['EVENT_CREATE', 'EVENT_EDIT'] }],
+      })),
+      http.get(`${api}/events/directory/clients`, () => HttpResponse.json([client])),
+      http.get(`${api}/clients`, () => HttpResponse.json({ items: [client] })),
+      http.post(`${api}/events/setup/start`, () => HttpResponse.json({
+        sessionId: 'setup-a', clientId: client.id, clientName: client.name, resumed: true,
+        message: 'Choose an event name to continue.',
+        draft: { event: eventDetails, suggestedName: 'Lisbon Conference', facts: [], schedule: [], guests: [] },
+      })),
+      http.post(`${api}/events/setup/analyze`, async ({ request }) => {
+        const data = await request.formData();
+        requests.push(data);
+        const rejected = data.get('nameDecision') === 'reject';
+        return HttpResponse.json({
+          sessionId: 'setup-a',
+          event: { ...eventDetails, ...(!rejected ? { name: data.get('eventName') ?? 'Lisbon Conference' } : {}) },
+          suggestedName: 'Lisbon Conference', nameSuggestionRejected: rejected,
+          message: rejected ? 'Enter the event name below.' : 'Everything required is ready.',
+          facts: [], schedule: [], guests: [], extractedFacts: 0, extractedScheduleItems: 0,
+        });
+      }),
+    );
+    renderApp(<MemoryRouter><CreateEventPage /></MemoryRouter>);
+    if (role === 'SUPER_ADMIN') {
+      await userEvent.click(await screen.findByRole('button', { name: 'Client' }));
+      await userEvent.click(screen.getByRole('option', { name: client.name }));
+      await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
+    }
+    expect(await screen.findByText('Lisbon Conference')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create event workspace' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: decision === 'accept' ? 'Accept name' : 'Reject' }));
+    if (decision === 'reject') {
+      await userEvent.type(await screen.findByLabelText('What should this event be called?'), 'Our custom forum');
+      await userEvent.click(screen.getByRole('button', { name: 'Use this name' }));
+    }
+    expect(await screen.findByRole('button', { name: 'Create event workspace' })).toBeEnabled();
+    expect(requests[0]?.get('nameDecision')).toBe(decision);
+    if (decision === 'reject') expect(requests[1]?.get('eventName')).toBe('Our custom forum');
+    expect(requests.every((data) => data.get('clientId') === client.id && data.get('sessionId') === 'setup-a')).toBe(true);
+  });
   it('keeps setup usable when a successful response omits messages and draft', async () => {
     server.use(
       http.get(`${api}/auth/me`, () => HttpResponse.json({
@@ -324,7 +380,7 @@ describe('CreateEventPage platform administrator flow', () => {
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
   });
 
-  it('resumes an unfinished setup and can archive it by starting a new chat', async () => {
+  it('returns to client selection before starting a new chat', async () => {
     let starts = 0;
     server.use(
       http.get(`${api}/auth/me`, () =>
@@ -403,10 +459,21 @@ describe('CreateEventPage platform administrator flow', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'New chat' }));
 
-    expect(await screen.findByText('Starting a fresh event setup.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Client' })).toHaveTextContent('Select a client');
+    expect(screen.getByRole('button', { name: 'Save and continue' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'New chat' })).not.toBeInTheDocument();
     expect(screen.queryByText('This is an unfinished conference.')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Add the event start and end dates, times, and timezone…')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Event information')).toBeDisabled();
+    expect(starts).toBe(1);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Client' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Northstar Events' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
+
+    expect(await screen.findByText('Starting a fresh event setup.')).toBeInTheDocument();
     expect(screen.getByLabelText('Event information')).toBeEnabled();
+    expect(starts).toBe(2);
   });
 
   it('offers a fillable brief when the client chooses the file workflow', async () => {

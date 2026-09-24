@@ -18,7 +18,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/atoms/Button';
-import { Textarea } from '../../components/atoms/Input';
+import { Input, Textarea } from '../../components/atoms/Input';
 import { FormField } from '../../components/molecules/FormField';
 import {
   AssistantMessage as ChatBubble,
@@ -64,6 +64,7 @@ type SetupAnalysis = {
   dateHints?: { startDate: string; endDate: string };
   suggestedName: string;
   nameWasProvided: boolean;
+  nameSuggestionRejected?: boolean;
   completeness: EventCompleteness;
   facts: Array<{ key: string; value: string; confidence: number }>;
   schedule: Array<{
@@ -108,6 +109,7 @@ type SetupStart = {
     documentReviewPending?: boolean;
     suggestedName: string;
     nameWasProvided: boolean;
+    nameSuggestionRejected?: boolean;
   };
 };
 
@@ -125,6 +127,8 @@ type SetupSubmission = {
   startAt?: string;
   endAt?: string;
   timezone?: string;
+  nameDecision?: 'accept' | 'reject';
+  eventName?: string;
 };
 
 type GuidedSetupStep = 'basics' | 'dates' | 'location' | 'organizer' | 'details' | 'ready';
@@ -192,10 +196,14 @@ export function CreateEventPage() {
   const defaultClient = params.get('clientId') ?? (user ? activeClientId(user) : '') ?? '';
   const [selectedClientId, setSelectedClientId] = useState(defaultClient);
   const [confirmedClientId, setConfirmedClientId] = useState('');
+  const [restartOnNextStart, setRestartOnNextStart] = useState(false);
   const [sessionId, setSessionId] = useState('');
   const [source, setSource] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [suggestedName, setSuggestedName] = useState('');
+  const [nameSuggestionRejected, setNameSuggestionRejected] = useState(false);
+  const [nameInput, setNameInput] = useState('');
   const [reviewed, setReviewed] = useState(false);
   const [dateHints, setDateHints] = useState({ startDate: '', endDate: '' });
   const [documentReviewPending, setDocumentReviewPending] = useState(false);
@@ -225,6 +233,7 @@ export function CreateEventPage() {
     onSuccess: (result) => {
       setConfirmedClientId(result.clientId);
       setSessionId(result.sessionId);
+      setRestartOnNextStart(false);
       const messages = Array.isArray(result.messages) ? result.messages : [];
       setConversation(messages.length
         ? messages.map((message) => ({
@@ -240,6 +249,9 @@ export function CreateEventPage() {
             text: result.message?.trim() || t('setupWelcomeFallback'),
           }]);
       const restored = result.draft;
+      setSuggestedName(restored?.suggestedName ?? '');
+      setNameSuggestionRejected(Boolean(restored?.nameSuggestionRejected));
+      setNameInput('');
       const restoredEvent = restored?.event ?? {};
       setDraft({
         ...emptyDraft,
@@ -266,7 +278,7 @@ export function CreateEventPage() {
     },
   });
   const analyze = useMutation({
-    mutationFn: ({ text, file: submittedFile, startAt, endAt, timezone }: SetupSubmission) =>
+    mutationFn: ({ text, file: submittedFile, startAt, endAt, timezone, nameDecision, eventName }: SetupSubmission) =>
       apiClient.form<SetupAnalysis>(
         '/events/setup/analyze',
         {
@@ -276,6 +288,8 @@ export function CreateEventPage() {
           ...(startAt ? { startAt } : {}),
           ...(endAt ? { endAt } : {}),
           ...(timezone ? { timezone } : {}),
+          ...(nameDecision ? { nameDecision } : {}),
+          ...(eventName ? { eventName } : {}),
         },
         submittedFile ?? undefined,
       ),
@@ -300,6 +314,9 @@ export function CreateEventPage() {
       setFile(submission.file);
     },
     onSuccess: (result) => {
+      setSuggestedName(result.suggestedName ?? '');
+      setNameSuggestionRejected(Boolean(result.nameSuggestionRejected));
+      if (result.event.name) setNameInput('');
       setDraft({
         ...emptyDraft,
         ...result.event,
@@ -358,6 +375,9 @@ export function CreateEventPage() {
     start.reset();
     analyze.reset();
     setDraft(emptyDraft);
+    setSuggestedName('');
+    setNameSuggestionRejected(false);
+    setNameInput('');
     setReviewed(false);
     setDocumentReviewPending(false);
     setDateHints({ startDate: '', endDate: '' });
@@ -372,7 +392,15 @@ export function CreateEventPage() {
   const saveClient = () => {
     const selectedClient = clients.data?.find((client) => client.id === selectedClientId);
     setSelectedClientMessage(selectedClient?.name ?? t('client'));
-    start.mutate({ nextClientId: selectedClientId });
+    start.mutate({ nextClientId: selectedClientId, restart: restartOnNextStart });
+  };
+  const startNewChat = () => {
+    if (!isSuperAdmin) {
+      start.mutate({ nextClientId: clientId, restart: true });
+      return;
+    }
+    selectClient('');
+    setRestartOnNextStart(true);
   };
   const submitBrief = () => {
     const text = source.trim();
@@ -424,7 +452,7 @@ export function CreateEventPage() {
               size="sm"
               variant="secondary"
               disabled={start.isPending || analyze.isPending || create.isPending}
-              onClick={() => start.mutate({ nextClientId: clientId, restart: true })}
+              onClick={startNewChat}
             >
               <MessageSquarePlus className="size-4" />
               {t('startNewSetupChat')}
@@ -499,6 +527,38 @@ export function CreateEventPage() {
           )}
           {analyze.isPending && <TypingBubble label={t('reviewingEventInformation')} />}
           {analyze.error && <ChatBubble danger>{analyze.error.message}</ChatBubble>}
+          {setupReady && reviewed && !draft.name && suggestedName && !documentReviewPending && !analyze.isPending && (
+            <ChatBubble>
+              {nameSuggestionRejected ? (
+                <form onSubmit={(event) => {
+                  event.preventDefault();
+                  if (nameInput.trim().length < 2 || composerDisabled) return;
+                  analyze.mutate({ text: nameInput.trim(), file: null, eventName: nameInput.trim() });
+                }}>
+                  <FormField label={t('provideEventName')} htmlFor="setup-event-name">
+                    <Input id="setup-event-name" value={nameInput} minLength={2} maxLength={160}
+                      required disabled={composerDisabled} onChange={(event) => setNameInput(event.target.value)} />
+                  </FormField>
+                  <Button className="mt-3" type="submit" disabled={composerDisabled || nameInput.trim().length < 2}>
+                    {t('useThisName')}
+                  </Button>
+                </form>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">{t('nameSuggestion')}</p>
+                  <p className="mt-2 font-semibold">{suggestedName}</p>
+                  <div className="mt-3 flex gap-2">
+                    <Button disabled={composerDisabled} onClick={() => analyze.mutate({
+                      text: `${t('acceptName')}: ${suggestedName}`, file: null, nameDecision: 'accept',
+                    })}>{t('acceptName')}</Button>
+                    <Button variant="secondary" disabled={composerDisabled} onClick={() => analyze.mutate({
+                      text: t('rejectName'), file: null, nameDecision: 'reject',
+                    })}>{t('rejectName')}</Button>
+                  </div>
+                </>
+              )}
+            </ChatBubble>
+          )}
           {setupReady && reviewed && guidedStep === 'dates' && !analyze.isPending && (
             <ChatBubble wide>
               <EventDateRangeCard

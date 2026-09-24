@@ -30,8 +30,8 @@ export function InvitationsPage() {
   const { t } = useTranslation('invitations');
   const { data: user } = useCurrentUser();
   const mayRead = Boolean(user && can(user, 'INVITATION_READ', event.clientId));
-  const maySend = Boolean(user && can(user, 'INVITATION_SEND', event.clientId));
-  const mayRevoke = Boolean(user && can(user, 'INVITATION_REVOKE', event.clientId));
+  const maySend = Boolean(user && (event.capabilities.canSendInvitations ?? event.capabilities.canEdit) && can(user, 'INVITATION_SEND', event.clientId));
+  const mayRevoke = Boolean(user && (event.capabilities.canRevokeInvitations ?? event.capabilities.canEdit) && can(user, 'INVITATION_REVOKE', event.clientId));
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [revokeTarget, setRevokeTarget] = useState<Invitation | null>(null);

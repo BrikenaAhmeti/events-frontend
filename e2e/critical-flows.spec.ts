@@ -124,8 +124,7 @@ test('guest confirms access and opens the mobile-first Concierge', async ({ page
     }),
   );
   await page.goto('/e/demo-event');
-  await page.getByLabel('Full name').fill('Avery Stone');
-  await page.getByLabel('Email').fill('avery@example.test');
+  await page.getByLabel('Your full name and email').fill('Avery Stone, avery@example.test');
   await page.getByRole('button', { name: 'Open Feliam' }).click();
   await expect(page.getByRole('heading', { name: 'Ask Concierge' })).toBeVisible();
 });
@@ -186,8 +185,7 @@ test('personal invitation requires confirmation and removes the secret from the 
   });
 
   await page.goto(`/i/${token}`);
-  await page.getByLabel('Full name').fill('Avery Stone');
-  await page.getByLabel('Email').fill('avery@example.test');
+  await page.getByLabel('Your full name and email').fill('Avery Stone, avery@example.test');
   await page.getByRole('button', { name: 'Open Feliam' }).click();
   await expect(page).toHaveURL(/\/guest\/events\/event-a$/);
   await expect(page).not.toHaveURL(new RegExp(token));
@@ -294,6 +292,53 @@ test('platform administrator can search and filter the paginated all-client even
   await statusRequest;
   await page.getByPlaceholder('Search by event name').fill('Leadership');
   await expect(visibleEventLink).toBeVisible();
+});
+
+for (const [accessState, heading] of [
+  ['NOT_STARTED', 'This event has not started yet'],
+  ['ENDED', 'This event has ended'],
+  ['CANCELLED', 'This event has been cancelled'],
+] as const) {
+  test(`both guest links block confirmation when the event is ${accessState}`, async ({ page }) => {
+    const event = { id: 'event-a', name: 'Leadership Forum', accessState };
+    await page.route(`${api}/**`, (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname.endsWith('/auth/csrf'))
+        return route.fulfill({ json: { csrfToken: 'e2e.csrf' } });
+      if (url.pathname.endsWith('/public/invitations/preview'))
+        return route.fulfill({ json: { event, requiresConfirmation: true } });
+      if (url.pathname.endsWith('/public/events/demo-event'))
+        return route.fulfill({ json: event });
+      return route.fulfill({ status: 404, json: { code: 'UNMOCKED_BROWSER_REQUEST' } });
+    });
+    for (const path of ['/e/demo-event', '/i/personal-invitation-token-that-is-long-enough']) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+      await expect(page.getByLabel('Your full name and email')).not.toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Ask Concierge' })).not.toBeVisible();
+    }
+  });
+}
+
+test('an open guest chat closes at the four-hour cutoff', async ({ page }) => {
+  await page.clock.install({ time: new Date('2027-10-12T21:59:00Z') });
+  await page.route(`${api}/**`, (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/guest/events/event-a'))
+      return route.fulfill({ json: {
+        id: 'event-a', name: 'Leadership Forum', category: 'CONFERENCE',
+        startAt: '2027-10-12T08:00:00Z', endAt: '2027-10-12T18:00:00Z',
+        accessClosesAt: '2027-10-12T22:00:00Z', timezone: 'Europe/Lisbon', schedule: [],
+      } });
+    if (url.pathname.endsWith('/guest/events/event-a/concierge/messages'))
+      return route.fulfill({ json: { id: null, messages: [] } });
+    return route.fulfill({ status: 404, json: { code: 'UNMOCKED_BROWSER_REQUEST' } });
+  });
+  await page.goto('/guest/events/event-a');
+  await expect(page.getByRole('heading', { name: 'Ask Concierge' })).toBeVisible();
+  await page.clock.fastForward(60_001);
+  await expect(page.getByRole('heading', { name: 'This event has ended' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ask Concierge' })).not.toBeVisible();
 });
 
 test('platform administrator confirms a client before the chat composer unlocks', async ({
@@ -414,13 +459,27 @@ test('event setup offers an accept or reject choice when the name is missing', a
           },
         },
       });
-    if (url.pathname.endsWith('/events/setup/analyze'))
+    if (url.pathname.endsWith('/events/setup/analyze')) {
+      const fields = await new Request(route.request().url(), {
+        method: 'POST',
+        headers: route.request().headers(),
+        body: route.request().postDataBuffer(),
+      }).formData();
+      const rejected = fields.get('nameDecision') === 'reject';
+      const nameField = fields.get('eventName');
+      const chosenName = typeof nameField === 'string' ? nameField : null;
       return route.fulfill({
         json: {
           sessionId: 'setup-a',
-          event: { category: 'WEDDING', destination: 'Pristina' },
+          message: chosenName ? `The event will be called ${chosenName}.` : undefined,
+          event: {
+            category: 'WEDDING',
+            destination: 'Pristina',
+            ...(chosenName ? { name: chosenName } : {}),
+          },
           suggestedName: 'Pristina Wedding Celebration 2027',
-          nameWasProvided: false,
+          nameWasProvided: Boolean(chosenName),
+          nameSuggestionRejected: rejected,
           completeness: {
             score: 22,
             ready: false,
@@ -440,6 +499,7 @@ test('event setup offers an accept or reject choice when the name is missing', a
           file: null,
         },
       });
+    }
     return route.fulfill({ status: 404, json: { code: 'UNMOCKED_BROWSER_REQUEST' } });
   });
 
@@ -450,7 +510,8 @@ test('event setup offers an accept or reject choice when the name is missing', a
   await page.getByRole('button', { name: 'Reject' }).click();
   await page.getByLabel('What should this event be called?').fill('Arta & Leon Celebration');
   await page.getByRole('button', { name: 'Use this name' }).click();
-  await expect(page.getByLabel('Event name')).toHaveValue('Arta & Leon Celebration');
+  await expect(page.getByText('The event will be called Arta & Leon Celebration.')).toBeVisible();
+  await expect(page.getByLabel('What should this event be called?')).not.toBeVisible();
 });
 
 test('client administrator completes the critical event operations flow', async ({ page }) => {
@@ -657,7 +718,7 @@ test('client administrator completes the critical event operations flow', async 
       'I captured the retreat details. You can add another detail or correction below at any time.',
     ),
   ).toBeInViewport();
-  await expect(page.getByText('Event information reviewed')).toBeVisible();
+  await expect(page.getByText('Required event information is complete.')).toBeVisible();
   await expect(page.getByLabel('Event information')).toBeEnabled();
   await page.getByRole('button', { name: 'Create event workspace' }).click();
   await expect(page.getByRole('heading', { name: 'Coastal Leadership Retreat' })).toBeVisible();

@@ -355,7 +355,7 @@ function InviteDialog({
       firstName: '',
       lastName: '',
       email: '',
-      permissions: permissions.slice(0, 6).map(({ value }) => value),
+      permissions: ['EVENT_READ', 'GUEST_READ', 'INVITATION_READ', ...permissions.filter(({ value }) => value !== 'TEAM_READ').map(({ value }) => value)],
     },
   });
   const invite = useMutation({

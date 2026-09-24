@@ -152,6 +152,7 @@ export function ConciergeWorkspace({
     },
     onError: (error, content) => {
       setHasStreamingText(false);
+      if (guest) void queryClient.invalidateQueries({ queryKey: ['guest-event', eventId] });
       if (streamErrorShown.current) return;
       setMessages((current) => [
         ...current,
@@ -165,13 +166,14 @@ export function ConciergeWorkspace({
     },
   });
   const publish = useMutation({
-    mutationFn: () => apiClient.post(`/events/${eventId}/publish`),
-    onSuccess: () => {
+    mutationFn: () => apiClient.post<{ invitationsQueued: number }>(`/events/${eventId}/publish`),
+    onSuccess: (result) => {
       setMessages((current) => [...current, {
-        id: crypto.randomUUID(), role: 'CONCIERGE', content: t('publishedInChat'),
+        id: crypto.randomUUID(), role: 'CONCIERGE', content: t('publishedInChat', { count: result.invitationsQueued ?? 0 }),
       }]);
       void queryClient.invalidateQueries({ queryKey: eventKeys.all });
       void queryClient.invalidateQueries({ queryKey: invitationKeys.access(eventId) });
+      void queryClient.invalidateQueries({ queryKey: invitationKeys.list(eventId) });
     },
   });
   const upload = useMutation({

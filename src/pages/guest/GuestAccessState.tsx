@@ -1,7 +1,16 @@
 import { CalendarClock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { ApiError } from '../../lib/api/api-client';
 
 export type AccessState = 'ACTIVE' | 'NOT_STARTED' | 'ENDED' | 'CANCELLED' | 'UNAVAILABLE';
+
+export function guestAccessStateFromError(error: unknown): AccessState | null {
+  if (!(error instanceof ApiError)) return null;
+  const states: Record<string, AccessState> = {
+    EVENT_ENDED: 'ENDED', EVENT_CANCELLED: 'CANCELLED', EVENT_NOT_STARTED: 'NOT_STARTED', EVENT_UNAVAILABLE: 'UNAVAILABLE',
+  };
+  return states[error.response.code] ?? null;
+}
 
 export function GuestAccessState({ state, eventName }: { state: AccessState; eventName?: string }) {
   const { t } = useTranslation('guest');

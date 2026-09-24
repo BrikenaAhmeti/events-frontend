@@ -1,15 +1,10 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, MapPin } from 'lucide-react';
-import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
-import { z } from 'zod';
-import { Button } from '../../components/atoms/Button';
-import { Input } from '../../components/atoms/Input';
-import { FormField } from '../../components/molecules/FormField';
 import { apiClient } from '../../lib/api/api-client';
-import { GuestAccessState, type AccessState } from './GuestAccessState';
+import { GuestConfirmation, type GuestIdentity } from './GuestConfirmation';
+import { GuestAccessState, guestAccessStateFromError, type AccessState } from './GuestAccessState';
 
 type PublicEvent = {
   id: string;
@@ -24,29 +19,31 @@ type PublicEvent = {
   timezone: string | null;
   accessState: AccessState;
 };
-const schema = z.object({ fullName: z.string().min(2), email: z.email() });
-type Values = z.infer<typeof schema>;
+
 
 export function PublicEventPage() {
   const { slug = '' } = useParams();
   const { t } = useTranslation('guest');
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const event = useQuery({
     queryKey: ['public-event', slug],
     queryFn: ({ signal }) => apiClient.get<PublicEvent>(`/public/events/${slug}`, signal),
     retry: false,
   });
-  const form = useForm<Values>({
-    resolver: zodResolver(schema),
-    defaultValues: { fullName: '', email: '' },
-  });
   const access = useMutation({
-    mutationFn: (values: Values) =>
+    mutationFn: (values: GuestIdentity) =>
       apiClient.post<{ eventId: string }>(`/public/events/${slug}/access`, values, {
         skipRefresh: true,
       }),
-    onSuccess: ({ eventId }) => void navigate(`/guest/events/${eventId}`, { replace: true }),
+    onSuccess: ({ eventId }) => {
+      queryClient.removeQueries({ queryKey: ['guest-event'] });
+      queryClient.removeQueries({ queryKey: ['concierge'] });
+      void navigate(`/guest/events/${eventId}`, { replace: true });
+    },
   });
+  const deniedState = guestAccessStateFromError(access.error);
+  if (deniedState) return <GuestAccessState state={deniedState} />;
   if (!event.data)
     return event.isLoading ? (
       <div className="grid min-h-[70vh] place-items-center">{t('loadingEvent')}</div>
@@ -88,39 +85,7 @@ export function PublicEventPage() {
           </span>
         </div>
       </section>
-      <aside className="rounded-2xl border border-border bg-surface-raised p-6">
-        <h2 className="font-display text-2xl">{t('enterTitle')}</h2>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">{t('identify')}</p>
-        <form
-          className="mt-6 space-y-5"
-          onSubmit={(submitEvent) =>
-            void form.handleSubmit((values) => access.mutate(values))(submitEvent)
-          }
-        >
-          <FormField
-            label={t('fullName', { ns: 'guests' })}
-            htmlFor="guest-name"
-            error={form.formState.errors.fullName?.message}
-          >
-            <Input id="guest-name" autoComplete="name" {...form.register('fullName')} />
-          </FormField>
-          <FormField
-            label={t('email', { ns: 'common' })}
-            htmlFor="guest-email"
-            error={form.formState.errors.email?.message}
-          >
-            <Input id="guest-email" type="email" autoComplete="email" {...form.register('email')} />
-          </FormField>
-          {access.error && (
-            <p className="rounded-lg bg-danger/10 p-3 text-sm text-danger" role="alert">
-              {t('notRecognized')}
-            </p>
-          )}
-          <Button className="w-full" type="submit" loading={access.isPending}>
-            {t('enter')}
-          </Button>
-        </form>
-      </aside>
+      <GuestConfirmation onConfirm={(identity) => access.mutate(identity)} pending={access.isPending} error={access.isError} />
     </div>
   );
 }

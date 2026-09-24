@@ -36,7 +36,7 @@ export function EventsPage() {
   const { data: user } = useCurrentUser();
   const [params] = useSearchParams();
   const [clientId, setClientId] = useState(
-    params.get('clientId') ?? (user ? activeClientId(user) : undefined) ?? '',
+    params.get('clientId') ?? (user && user.platformRole !== 'SUPER_ADMIN' ? activeClientId(user) : undefined) ?? '',
   );
   const [search, setSearch] = useState('');
   const [lifecycles, setLifecycles] = useState<string[]>([]);

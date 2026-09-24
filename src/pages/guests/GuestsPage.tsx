@@ -56,8 +56,8 @@ export function GuestsPage() {
   const { t } = useTranslation('guests');
   const { data: user } = useCurrentUser();
   const mayRead = Boolean(user && can(user, 'GUEST_READ', event.clientId));
-  const mayManage = Boolean(user && can(user, 'GUEST_MANAGE', event.clientId));
-  const mayImport = Boolean(user && can(user, 'GUEST_IMPORT', event.clientId));
+  const mayManage = Boolean(user && (event.capabilities.canManageGuests ?? event.capabilities.canEdit) && can(user, 'GUEST_MANAGE', event.clientId));
+  const mayImport = Boolean(user && (event.capabilities.canImportGuests ?? event.capabilities.canEdit) && can(user, 'GUEST_IMPORT', event.clientId));
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const importInput = useRef<HTMLInputElement>(null);

@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, MapPin } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { ConciergeWorkspace } from '../../components/organisms/ConciergeWorkspace';
-import { ApiError, apiClient } from '../../lib/api/api-client';
+import { apiClient } from '../../lib/api/api-client';
 import type { ScheduleItem } from '../../types/domain';
-import { GuestAccessState, type AccessState } from './GuestAccessState';
+import { GuestAccessState, guestAccessStateFromError } from './GuestAccessState';
 
 type GuestEvent = {
   id: string;
@@ -24,28 +25,30 @@ type GuestEvent = {
   endAt: string | null;
   timezone: string | null;
   organizerName: string | null;
+  accessClosesAt?: string;
   schedule: ScheduleItem[];
 };
 
 export function GuestEventPage() {
   const { t } = useTranslation('guest');
   const { eventId = '' } = useParams();
+  const [now, setNow] = useState(Date.now);
   const event = useQuery({
     queryKey: ['guest-event', eventId],
     queryFn: ({ signal }) => apiClient.get<GuestEvent>(`/guest/events/${eventId}`, signal),
     retry: false,
+    refetchInterval: 30_000,
   });
-  if (!event.data) {
-    const code = event.error instanceof ApiError ? event.error.response.code : '';
-    const state: AccessState | null =
-      code === 'EVENT_ENDED'
-        ? 'ENDED'
-        : code === 'EVENT_CANCELLED'
-          ? 'CANCELLED'
-          : code === 'EVENT_NOT_STARTED'
-            ? 'NOT_STARTED'
-            : null;
-    if (state) return <GuestAccessState state={state} />;
+  const closesAt = event.data?.accessClosesAt ? Date.parse(event.data.accessClosesAt) : undefined;
+  useEffect(() => {
+    if (closesAt === undefined || closesAt <= now) return;
+    const timer = setTimeout(() => setNow(Date.now()), Math.min(Math.max(0, closesAt - Date.now()), 2_147_483_647));
+    return () => clearTimeout(timer);
+  }, [closesAt, now]);
+  const state = guestAccessStateFromError(event.error);
+  if (state) return <GuestAccessState state={state} />;
+  if (closesAt !== undefined && now >= closesAt) return <GuestAccessState state="ENDED" eventName={event.data?.name} />;
+  if (!event.data || event.isError) {
     return (
       <div className="grid min-h-[70vh] place-items-center px-4 text-center">
         <div>

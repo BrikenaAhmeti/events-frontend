@@ -12,6 +12,7 @@ const event = {
   clientId: 'client-a',
   name: 'Leadership Forum',
   status: 'READY',
+  capabilities: { canEdit: false, canManageGuests: true, canImportGuests: true },
 } as EventDetail;
 
 function Harness() {
