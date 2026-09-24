@@ -192,7 +192,12 @@ export function CreateEventPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const chatLogRef = useRef<HTMLDivElement>(null);
+  const dateCardRef = useRef<HTMLDivElement>(null);
   const conversationEndRef = useRef<HTMLDivElement>(null);
+  const restoreComposerFocus = () => requestAnimationFrame(() => {
+    if (dateCardRef.current || document.activeElement?.matches('input, textarea, select, [contenteditable="true"]')) return;
+    composerRef.current?.focus({ preventScroll: true });
+  });
   const defaultClient = params.get('clientId') ?? (user ? activeClientId(user) : '') ?? '';
   const [selectedClientId, setSelectedClientId] = useState(defaultClient);
   const [confirmedClientId, setConfirmedClientId] = useState('');
@@ -274,7 +279,7 @@ export function CreateEventPage() {
       });
       setSource('');
       setFile(null);
-      requestAnimationFrame(() => composerRef.current?.focus());
+      restoreComposerFocus();
     },
   });
   const analyze = useMutation({
@@ -345,7 +350,7 @@ export function CreateEventPage() {
         },
       ]);
     },
-    onSettled: () => requestAnimationFrame(() => composerRef.current?.focus()),
+    onSettled: restoreComposerFocus,
   });
   const create = useMutation({
     mutationFn: async () => {
@@ -425,6 +430,15 @@ export function CreateEventPage() {
   const composerDisabled = !setupReady || start.isPending || analyze.isPending || create.isPending;
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
+      const log = chatLogRef.current;
+      const dateCard = dateCardRef.current;
+      if (log && dateCard && typeof log.scrollTo === 'function') {
+        log.scrollTo({
+          top: log.scrollTop + dateCard.getBoundingClientRect().top - log.getBoundingClientRect().top - 16,
+          behavior: 'smooth',
+        });
+        return;
+      }
       const conversationEnd = conversationEndRef.current;
       if (conversationEnd && typeof conversationEnd.scrollIntoView === 'function')
         conversationEnd.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -560,17 +574,20 @@ export function CreateEventPage() {
             </ChatBubble>
           )}
           {setupReady && reviewed && !documentReviewPending && guidedStep === 'dates' && !analyze.isPending && (
-            <ChatBubble wide>
-              <EventDateRangeCard
-                value={{ startAt: draft.startAt, endAt: draft.endAt, timezone: draft.timezone,
-                  startDate: dateHints.startDate, endDate: dateHints.endDate }}
-                disabled={composerDisabled}
-                onSubmit={({ startAt, endAt, timezone }) => analyze.mutate({
-                  text: `The event starts at ${startAt} and ends at ${endAt} in ${timezone}.`,
-                  file: null, startAt, endAt, timezone,
-                })}
-              />
-            </ChatBubble>
+            <div ref={dateCardRef}>
+              <ChatBubble wide>
+                <EventDateRangeCard
+                  key={[draft.startAt, draft.endAt, draft.timezone, dateHints.startDate, dateHints.endDate].join('|')}
+                  value={{ startAt: draft.startAt, endAt: draft.endAt, timezone: draft.timezone,
+                    startDate: dateHints.startDate, endDate: dateHints.endDate }}
+                  disabled={composerDisabled}
+                  onSubmit={({ startAt, endAt, timezone }) => analyze.mutate({
+                    text: `The event starts at ${startAt} and ends at ${endAt} in ${timezone}.`,
+                    file: null, startAt, endAt, timezone,
+                  })}
+                />
+              </ChatBubble>
+            </div>
           )}
           {documentReviewPending && !analyze.isPending && (
             <ChatBubble>

@@ -2,18 +2,16 @@ import clsx from 'clsx';
 import { Check, ChevronDown, type LucideIcon } from 'lucide-react';
 import {
   forwardRef,
-  useCallback,
   useEffect,
   useId,
-  useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent,
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '../atoms/Button';
+import { usePopoverPosition } from '../../lib/use-popover-position';
 
 export type CustomSelectOption = {
   value: string;
@@ -38,20 +36,30 @@ export function CustomSelect({
   onChange,
   className,
   disabled = false,
+  searchable = false,
+  searchPlaceholder = 'Search options',
+  noResultsText = 'No matching options',
 }: SharedSelectProps & {
   value: string;
   onChange: (value: string) => void;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  noResultsText?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
   const selected = options.find((option) => option.value === value) ?? options[0];
-  const position = useSelectPopover(open, triggerRef);
+  const position = usePopoverPosition(open, triggerRef);
+  const filtered = options.filter((option) =>
+    `${option.label} ${option.value}`.toLowerCase().includes(search.toLowerCase()),
+  );
 
   useSelectDismiss(open, setOpen, triggerRef, rootRef, menuRef);
-  useFocusSelectedOption(open, menuRef);
+  useFocusSelectedOption(open && !searchable, menuRef);
 
   return (
     <div ref={rootRef} className={clsx('relative', className)}>
@@ -64,42 +72,67 @@ export function CustomSelect({
         icon={Icon}
         value={selected?.label ?? label}
         menuId={menuId}
-        onToggle={() => setOpen((current) => !current)}
+        onToggle={() => {
+          setSearch('');
+          setOpen((current) => !current);
+        }}
       />
       {open &&
         createPortal(
           <div
             ref={menuRef}
-            id={menuId}
-            role="listbox"
-            aria-label={label}
-            className="fixed z-[100] overflow-y-auto rounded-2xl border border-border bg-surface-raised p-1.5 shadow-[0_22px_60px_rgb(0_0_0/0.22)]"
+            className="fixed z-[100] flex flex-col overflow-hidden rounded-2xl border border-border bg-surface-raised p-1.5 shadow-[0_22px_60px_rgb(0_0_0/0.22)]"
             style={position}
             onKeyDown={handleListboxKeyboard}
           >
-            {options.map((option) => {
-              const isSelected = option.value === value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="option"
-                  aria-selected={isSelected}
-                  className={clsx(
-                    'flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/35',
-                    isSelected ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-muted',
-                  )}
-                  onClick={() => {
-                    onChange(option.value);
-                    setOpen(false);
-                    triggerRef.current?.focus();
-                  }}
-                >
-                  <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                  <Check className={clsx('size-4 shrink-0', !isSelected && 'invisible')} aria-hidden />
-                </button>
-              );
-            })}
+            {searchable && (
+              <div className="shrink-0 pb-1.5">
+                <input
+                  autoFocus
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  aria-label={searchPlaceholder}
+                  placeholder={searchPlaceholder}
+                  className="min-h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm outline-none focus:ring-2 focus:ring-focus/25"
+                />
+              </div>
+            )}
+            <div id={menuId} role="listbox" aria-label={label} className="min-h-0 overflow-y-auto">
+              {filtered.map((option) => {
+                const isSelected = option.value === value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    className={clsx(
+                      'flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/35',
+                      isSelected
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-foreground hover:bg-muted',
+                    )}
+                    onClick={() => {
+                      onChange(option.value);
+                      setOpen(false);
+                      triggerRef.current?.focus();
+                    }}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                    <Check
+                      className={clsx('size-4 shrink-0', !isSelected && 'invisible')}
+                      aria-hidden
+                    />
+                  </button>
+                );
+              })}
+            </div>
+            {filtered.length === 0 && (
+              <p role="status" className="px-3 py-5 text-sm text-muted-foreground">
+                {noResultsText}
+              </p>
+            )}
           </div>,
           document.body,
         )}
@@ -133,7 +166,7 @@ export function CustomMultiSelect({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
-  const position = useSelectPopover(open, triggerRef);
+  const position = usePopoverPosition(open, triggerRef);
   const selectedOptions = options.filter((option) => value.includes(option.value));
   const summary =
     selectedOptions.length === 0
@@ -181,7 +214,9 @@ export function CustomMultiSelect({
                     aria-selected={isSelected}
                     className={clsx(
                       'flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/35',
-                      isSelected ? 'bg-primary/10 text-foreground' : 'text-foreground hover:bg-muted',
+                      isSelected
+                        ? 'bg-primary/10 text-foreground'
+                        : 'text-foreground hover:bg-muted',
                     )}
                     onClick={() =>
                       onChange(
@@ -194,7 +229,9 @@ export function CustomMultiSelect({
                     <span
                       className={clsx(
                         'grid size-5 shrink-0 place-items-center rounded-md border transition-colors',
-                        isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-surface',
+                        isSelected
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-input bg-surface',
                       )}
                       aria-hidden
                     >
@@ -246,7 +283,10 @@ const SelectTrigger = forwardRef<
     menuId: string;
     onToggle: () => void;
   }
->(function SelectTrigger({ id, label, value, open, disabled, icon: Icon, badge, menuId, onToggle }, ref) {
+>(function SelectTrigger(
+  { id, label, value, open, disabled, icon: Icon, badge, menuId, onToggle },
+  ref,
+) {
   return (
     <button
       id={id}
@@ -318,7 +358,9 @@ function useFocusSelectedOption(open: boolean, menuRef: RefObject<HTMLDivElement
   useEffect(() => {
     if (!open) return;
     const frame = requestAnimationFrame(() => {
-      const selected = menuRef.current?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]');
+      const selected = menuRef.current?.querySelector<HTMLElement>(
+        '[role="option"][aria-selected="true"]',
+      );
       const first = menuRef.current?.querySelector<HTMLElement>('[role="option"]');
       (selected ?? first)?.focus();
     });
@@ -326,43 +368,9 @@ function useFocusSelectedOption(open: boolean, menuRef: RefObject<HTMLDivElement
   }, [menuRef, open]);
 }
 
-function useSelectPopover(open: boolean, triggerRef: RefObject<HTMLButtonElement | null>) {
-  const [position, setPosition] = useState<CSSProperties>({});
-  const updatePosition = useCallback(() => {
-    const trigger = triggerRef.current;
-    if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const margin = 12;
-    const gap = 8;
-    const width = Math.min(Math.max(rect.width, 208), window.innerWidth - margin * 2);
-    const left = Math.min(Math.max(margin, rect.left), window.innerWidth - width - margin);
-    const spaceBelow = window.innerHeight - rect.bottom - margin - gap;
-    const spaceAbove = rect.top - margin - gap;
-    const placeAbove = spaceBelow < 180 && spaceAbove > spaceBelow;
-    setPosition({
-      left,
-      width,
-      maxHeight: Math.max(144, Math.min(288, placeAbove ? spaceAbove : spaceBelow)),
-      ...(placeAbove ? { bottom: window.innerHeight - rect.top + gap } : { top: rect.bottom + gap }),
-    });
-  }, [triggerRef]);
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    updatePosition();
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
-    return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
-    };
-  }, [open, updatePosition]);
-
-  return position;
-}
-
 function handleListboxKeyboard(event: KeyboardEvent<HTMLDivElement>) {
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+  if (event.target instanceof HTMLInputElement && ['Home', 'End'].includes(event.key)) return;
   const options = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="option"]'));
   if (options.length === 0) return;
   event.preventDefault();
@@ -372,8 +380,12 @@ function handleListboxKeyboard(event: KeyboardEvent<HTMLDivElement>) {
       ? 0
       : event.key === 'End'
         ? options.length - 1
-        : event.key === 'ArrowDown'
-          ? (current + 1 + options.length) % options.length
-          : (current - 1 + options.length) % options.length;
+        : current < 0
+          ? event.key === 'ArrowUp'
+            ? options.length - 1
+            : 0
+          : event.key === 'ArrowDown'
+            ? (current + 1 + options.length) % options.length
+            : (current - 1 + options.length) % options.length;
   options[next]?.focus();
 }

@@ -57,7 +57,9 @@ describe('CreateEventPage platform administrator flow', () => {
     expect(screen.queryByRole('button', { name: 'Create event workspace' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: decision === 'accept' ? 'Accept name' : 'Reject' }));
     if (decision === 'reject') {
-      await userEvent.type(await screen.findByLabelText('What should this event be called?'), 'Our custom forum');
+      const nameInput = await screen.findByLabelText('What should this event be called?');
+      await userEvent.type(nameInput, 'Our custom forum', { delay: 5 });
+      expect(nameInput).toHaveValue('Our custom forum');
       await userEvent.click(screen.getByRole('button', { name: 'Use this name' }));
     }
     expect(await screen.findByRole('button', { name: 'Create event workspace' })).toBeEnabled();
@@ -137,13 +139,13 @@ describe('CreateEventPage platform administrator flow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
     const confirm = await screen.findByRole('button', { name: 'Confirm extracted details' });
     expect(screen.queryByRole('button', { name: 'Create event workspace' })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Start date and time hour')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Start time')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Event information')).toHaveAttribute('placeholder',
       'Confirm the details above, or tell me what to correct…');
     await userEvent.click(confirm);
     await waitFor(() => expect(texts).toEqual(['Confirm details']));
     if (missingDates) {
-      expect(await screen.findByLabelText('Start date and time hour')).toBeInTheDocument();
+      expect(await screen.findByLabelText('Start time')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Create event workspace' })).not.toBeInTheDocument();
     } else {
       expect(await screen.findByRole('button', { name: 'Create event workspace' })).toBeEnabled();
