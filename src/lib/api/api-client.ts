@@ -1,4 +1,5 @@
 import type { ApiErrorShape } from '../../types/domain';
+import { assertUploadSize } from './upload-limits';
 
 const environment = import.meta.env as unknown as Record<string, unknown>;
 const API_URL =
@@ -181,12 +182,14 @@ export const apiClient = {
   patch: <T>(path: string, body: unknown) => request<T>(path, { method: 'PATCH', body }),
   delete: <T = void>(path: string) => request<T>(path, { method: 'DELETE' }),
   form: <T>(path: string, fields: Record<string, string>, file?: File) => {
+    if (file) assertUploadSize(file);
     const body = new FormData();
     for (const [key, value] of Object.entries(fields)) body.append(key, value);
     if (file) body.append('file', file);
     return request<T>(path, { method: 'POST', body });
   },
   upload: <T>(path: string, file: File) => {
+    assertUploadSize(file);
     const body = new FormData();
     body.append('file', file);
     return request<T>(path, { method: 'POST', body });

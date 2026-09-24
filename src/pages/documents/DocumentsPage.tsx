@@ -9,6 +9,7 @@ import { StatusBadge } from '../../components/molecules/StatusBadge';
 import { can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
 import { apiClient } from '../../lib/api/api-client';
+import { uploadSizeError } from '../../lib/api/upload-limits';
 import { documentKeys } from '../../lib/api/query-keys';
 import type { EventOutletContext } from '../events/EventLayout';
 
@@ -57,7 +58,10 @@ export function DocumentsPage() {
   });
   const choose = (files: FileList | null) => {
     const file = files?.[0];
-    if (file) upload.mutate(file);
+    if (!file) return;
+    const error = uploadSizeError(file);
+    if (error) showToast(error, 'danger');
+    else upload.mutate(file);
   };
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">

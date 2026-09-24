@@ -35,6 +35,7 @@ import {
   type EventBriefTemplateFormat,
 } from '../../features/events/event-brief-templates';
 import { apiClient } from '../../lib/api/api-client';
+import { uploadSizeError } from '../../lib/api/upload-limits';
 import { clientKeys } from '../../lib/api/query-keys';
 import type { Client, EventCompleteness, EventSummary, Page } from '../../types/domain';
 
@@ -209,6 +210,7 @@ export function CreateEventPage() {
   const [sessionId, setSessionId] = useState('');
   const [source, setSource] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [nameSuggestions, setNameSuggestions] = useState<string[]>([]);
   const [nameSuggestionRejected, setNameSuggestionRejected] = useState(false);
@@ -286,6 +288,7 @@ export function CreateEventPage() {
       });
       setSource('');
       setFile(null);
+      setFileError(null);
       restoreComposerFocus();
     },
   });
@@ -389,6 +392,7 @@ export function CreateEventPage() {
     setConversation([]);
     setSource('');
     setFile(null);
+    setFileError(null);
     start.reset();
     analyze.reset();
     setDraft(emptyDraft);
@@ -560,6 +564,7 @@ export function CreateEventPage() {
           )}
           {analyze.isPending && <TypingBubble label={t('reviewingEventInformation')} />}
           {analyze.error && <ChatBubble danger>{analyze.error.message}</ChatBubble>}
+          {fileError && <ChatBubble danger>{fileError}</ChatBubble>}
           {setupReady && reviewed && !draft.name && (nameSuggestions.length > 0 || nameSuggestionRejected) && !documentReviewPending && !analyze.isPending && (
             <ChatBubble>
               {nameSuggestionRejected ? (
@@ -691,7 +696,13 @@ export function CreateEventPage() {
                 className="sr-only"
                 type="file"
                 accept=".pdf,.docx,.txt,.csv,.xlsx"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                onChange={(event) => {
+                  const selected = event.target.files?.[0] ?? null;
+                  const error = selected ? uploadSizeError(selected) : null;
+                  setFileError(error);
+                  setFile(error ? null : selected);
+                  event.target.value = '';
+                }}
                 disabled={composerDisabled}
               />
               <button
@@ -699,13 +710,13 @@ export function CreateEventPage() {
                 className="grid size-10 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none"
                 onClick={() => fileRef.current?.click()}
                 aria-label={t('attachEventFile')}
-                title={t('attachEventFile')}
+                title={`${t('attachEventFile')} · ${t('uploadLimit')}`}
                 disabled={composerDisabled}
               >
                 <Paperclip className="size-5" />
               </button>
               <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                {setupReady ? (reviewed ? t('sendMoreHint') : t('sendHint')) : ''}
+                {setupReady ? `${reviewed ? t('sendMoreHint') : t('sendHint')} · ${t('uploadLimit')}` : ''}
               </span>
               <Button
                 type="submit"

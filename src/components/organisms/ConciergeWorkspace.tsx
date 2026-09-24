@@ -10,6 +10,7 @@ import { GuestImportDialog } from '../../features/guests/GuestImportDialog';
 import { guestLanguageLabel, guestLanguageOptions } from '../../features/guest-chat/languages';
 import { downloadGuestTemplate, type GuestImportPreview, type GuestImportRow } from '../../features/guests/guest-import';
 import { apiClient } from '../../lib/api/api-client';
+import { uploadSizeError } from '../../lib/api/upload-limits';
 import { documentKeys, eventKeys, guestKeys, invitationKeys } from '../../lib/api/query-keys';
 import { useEventSocket } from '../../lib/websocket/use-event-socket';
 import { CustomSelect } from '../molecules/CustomSelect';
@@ -56,6 +57,8 @@ export function ConciergeWorkspace({
   const [step, setStep] = useState<'details' | 'guests' | 'publish'>('details');
   const [guestRowsPending, setGuestRowsPending] = useState(false);
   const [guestPreview, setGuestPreview] = useState<GuestImportPreview | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [guestFileError, setGuestFileError] = useState<string | null>(null);
   const [publishWithInvitations, setPublishWithInvitations] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [guestLanguage, setGuestLanguage] = useState<string | null>(null);
@@ -361,6 +364,8 @@ export function ConciergeWorkspace({
         {startGuestChat.isPending && <TypingIndicator label={t('startingGuestChat')} />}
         {send.isPending && !hasStreamingText && <TypingIndicator label={t('processing')} />}
         {upload.isPending && <TypingIndicator label={t('uploading')} />}
+        {fileError && <AssistantMessage danger>{fileError}</AssistantMessage>}
+        {upload.error && <AssistantMessage danger>{upload.error.message}</AssistantMessage>}
         {!guest && eventStatus === 'READY' && ready && allowPlanning && !history.isLoading && !publish.isSuccess && (
           <AssistantMessage wide>
             <div className="space-y-3 text-sm leading-6">
@@ -381,12 +386,20 @@ export function ConciergeWorkspace({
                     void queryClient.invalidateQueries({ queryKey: guestKeys.list(eventId) });
                   }} />}
                   {allowGuestImport && <div className="flex flex-wrap gap-2">
-                    <input ref={guestFileRef} type="file" accept=".csv,.xlsx" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) previewGuests.mutate(file); event.target.value = ''; }} />
+                    <input ref={guestFileRef} type="file" accept=".csv,.xlsx" className="sr-only" onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      const error = file ? uploadSizeError(file) : null;
+                      setGuestFileError(error);
+                      if (file && !error) previewGuests.mutate(file);
+                      event.target.value = '';
+                    }} />
                     <Button type="button" variant="secondary" loading={previewGuests.isPending} onClick={() => guestFileRef.current?.click()}>{t('uploadGuestList')}</Button>
+                    <span className="self-center text-xs text-muted-foreground">{t('uploadLimit')}</span>
                     <Button type="button" variant="quiet" onClick={() => void downloadGuestTemplate('csv')}>{t('csvGuestTemplate')}</Button>
                     <Button type="button" variant="quiet" onClick={() => void downloadGuestTemplate('xlsx')}>{t('excelGuestTemplate')}</Button>
                   </div>}
                   {previewGuests.error && <p role="alert" className="text-danger">{previewGuests.error.message}</p>}
+                  {guestFileError && <p role="alert" className="text-danger">{guestFileError}</p>}
                   {guestRowsPending && <p className="text-xs text-muted-foreground">{t('saveGuestBeforePublish')}</p>}
                   <Button type="button" disabled={guestRowsPending} onClick={() => setStep('publish')}>
                     {t('continueToPublish')}
@@ -502,7 +515,9 @@ export function ConciergeWorkspace({
                   accept=".pdf,.docx,.txt,.csv,.xlsx"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
-                    if (file) upload.mutate(file);
+                    const error = file ? uploadSizeError(file) : null;
+                    setFileError(error);
+                    if (file && !error) upload.mutate(file);
                     event.target.value = '';
                   }}
                   disabled={upload.isPending || send.isPending}
@@ -513,7 +528,7 @@ export function ConciergeWorkspace({
                   onClick={() => fileRef.current?.click()}
                   disabled={upload.isPending || send.isPending}
                   aria-label={t('attach')}
-                  title={t('attach')}
+                  title={`${t('attach')} · ${t('uploadLimit')}`}
                 >
                   <Paperclip className="size-5" />
                 </button>

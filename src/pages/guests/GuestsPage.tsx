@@ -16,6 +16,7 @@ import { useCurrentUser } from '../../features/auth/use-current-user';
 import { GuestImportDialog } from '../../features/guests/GuestImportDialog';
 import { downloadGuestTemplate, type GuestImportPreview, type GuestImportRow } from '../../features/guests/guest-import';
 import { apiClient } from '../../lib/api/api-client';
+import { uploadSizeError } from '../../lib/api/upload-limits';
 import { guestKeys, invitationKeys } from '../../lib/api/query-keys';
 import type { Page } from '../../types/domain';
 import type { EventOutletContext } from '../events/EventLayout';
@@ -119,7 +120,11 @@ export function GuestsPage() {
             className="sr-only"
             onChange={(event) => {
               const file = event.target.files?.[0];
-              if (file) previewImport.mutate(file);
+              if (file) {
+                const error = uploadSizeError(file);
+                if (error) showToast(error, 'danger');
+                else previewImport.mutate(file);
+              }
               event.target.value = '';
             }}
           />
@@ -133,6 +138,7 @@ export function GuestsPage() {
               {t('import')}
             </Button>
           )}
+          {mayImport && <span className="self-center text-xs text-muted-foreground">{t('importLimit')}</span>}
           {mayManage && (
             <Button onClick={() => setAddOpen(true)}>
               <Plus className="size-4" />
