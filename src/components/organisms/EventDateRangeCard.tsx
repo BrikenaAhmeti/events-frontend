@@ -1,5 +1,5 @@
 import { CalendarDays, Check, Globe2 } from 'lucide-react';
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../atoms/Button';
 import { DateFilter, type DateFilterValue } from '../molecules/DateFilter';
@@ -82,6 +82,17 @@ export function EventDateRangeCard({
   const [endTime, setEndTime] = useState(initialEnd.split('T')[1] || '');
   const [error, setError] = useState('');
   const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+  let today: string;
+  try {
+    today = partsInZone(now, timezone || localTimezone).slice(0, 10);
+  } catch {
+    today = partsInZone(now, localTimezone).slice(0, 10);
+  }
   const timezoneOptions = useMemo(() => {
     const supported =
       typeof Intl.supportedValuesOf === 'function'
@@ -98,7 +109,8 @@ export function EventDateRangeCard({
   const to = range.date || range.to;
   const startAt = localDateTimeToUtc(`${from}T${normalizeTime(startTime) ?? ''}`, timezone);
   const endAt = localDateTimeToUtc(`${to}T${normalizeTime(endTime) ?? ''}`, timezone);
-  const ready = Boolean(startAt && endAt && endAt > startAt);
+  const startInPast = Boolean(startAt && Date.parse(startAt) <= now.getTime());
+  const ready = Boolean(startAt && endAt && endAt > startAt && !startInPast);
   const duration = ready ? Math.round((Date.parse(endAt!) - Date.parse(startAt!)) / 60_000) : 0;
   const durationText = [
     Math.floor(duration / 1_440) ? t('durationDays', { count: Math.floor(duration / 1_440) }) : '',
@@ -124,6 +136,10 @@ export function EventDateRangeCard({
     }
     if (endAt <= startAt) {
       setError(t('dateRangeOrder'));
+      return;
+    }
+    if (Date.parse(startAt) <= Date.now()) {
+      setError(t('eventStartMustBeFuture'));
       return;
     }
     setError('');
@@ -152,6 +168,7 @@ export function EventDateRangeCard({
           label={t('eventDates')}
           emptyLabel={t('chooseDayOrRange')}
           disabled={disabled}
+          minDate={today}
         />
       </div>
       <div>
@@ -231,9 +248,9 @@ export function EventDateRangeCard({
           <p className="mt-1 text-xs text-muted-foreground">{timezone.replaceAll('_', ' ')}</p>
         </div>
       )}
-      {error && (
+      {(error || startInPast) && (
         <p role="alert" className="text-sm text-danger">
-          {error}
+          {error || t('eventStartMustBeFuture')}
         </p>
       )}
       <Button className="w-full sm:w-auto" type="button" onClick={submit} disabled={disabled}>

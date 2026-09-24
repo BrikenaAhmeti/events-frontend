@@ -39,6 +39,7 @@ export function DateFilter({
   label,
   emptyLabel,
   disabled = false,
+  minDate,
 }: {
   value: DateFilterValue;
   onChange: (value: DateFilterValue) => void;
@@ -48,15 +49,19 @@ export function DateFilter({
   label?: string;
   emptyLabel?: string;
   disabled?: boolean;
+  minDate?: string;
 }) {
   const { t } = useTranslation('events');
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<DateMode>(() =>
     rangeOnly ? 'range' : (initialMode ?? (value.from || value.to ? 'range' : 'single')),
   );
-  const [visibleMonth, setVisibleMonth] = useState(() =>
-    startOfMonth(parseDate(value.date || value.from) ?? new Date()),
-  );
+  const [visibleMonth, setVisibleMonth] = useState(() => {
+    const selected = value.date || value.from;
+    const initial = selected && minDate && selected < minDate ? minDate : selected;
+    return startOfMonth(parseDate(initial) ?? new Date());
+  });
+  const minMonth = minDate ? startOfMonth(parseDate(minDate) ?? new Date()) : null;
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -112,24 +117,27 @@ export function DateFilter({
     setMode(nextMode);
     if (nextMode === 'single') {
       const nextDate = value.date || value.from;
-      onChange({ date: nextDate, from: '', to: '' });
-      if (nextDate) setVisibleMonth(startOfMonth(parseDate(nextDate)!));
+      const validDate = nextDate && minDate && nextDate < minDate ? '' : nextDate;
+      onChange({ date: validDate, from: '', to: '' });
+      if (validDate) setVisibleMonth(startOfMonth(parseDate(validDate)!));
       return;
     }
     const nextFrom = value.from || value.date;
-    onChange({ date: '', from: nextFrom, to: value.to });
-    if (nextFrom) setVisibleMonth(startOfMonth(parseDate(nextFrom)!));
+    const validFrom = nextFrom && minDate && nextFrom < minDate ? '' : nextFrom;
+    onChange({ date: '', from: validFrom, to: validFrom ? value.to : '' });
+    if (validFrom) setVisibleMonth(startOfMonth(parseDate(validFrom)!));
   };
 
   const selectDay = (day: Date) => {
     const selected = dateKey(day);
+    if (minDate && selected < minDate) return;
     if (mode === 'single') {
       onChange({ date: selected, from: '', to: '' });
       setOpen(false);
       triggerRef.current?.focus();
       return;
     }
-    if (!value.from || value.to) {
+    if (!value.from || value.to || (minDate && value.from < minDate)) {
       onChange({ date: '', from: selected, to: '' });
       return;
     }
@@ -150,7 +158,10 @@ export function DateFilter({
         aria-controls={menuId}
         aria-expanded={open}
         disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (!open && minMonth && visibleMonth < minMonth) setVisibleMonth(minMonth);
+          setOpen((current) => !current);
+        }}
       >
         <CalendarRange className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         <span className="min-w-0 flex-1 truncate font-medium">{summary}</span>
@@ -199,6 +210,7 @@ export function DateFilter({
                 type="button"
                 className="filter-control grid size-9 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                 aria-label={t('previousMonth')}
+                disabled={Boolean(minMonth && visibleMonth <= minMonth)}
                 onClick={() => setVisibleMonth(addMonths(visibleMonth, -1))}
               >
                 <ChevronLeft className="size-4" aria-hidden />
@@ -230,6 +242,7 @@ export function DateFilter({
                   value.from && value.to && key > value.from && key < value.to,
                 );
                 const isToday = key === dateKey(new Date());
+                const isBeforeMin = Boolean(minDate && key < minDate);
                 return (
                   <button
                     key={key}
@@ -237,8 +250,10 @@ export function DateFilter({
                     role="gridcell"
                     aria-label={longFormatter.format(day)}
                     aria-selected={isSelected || inRange}
+                    disabled={isBeforeMin}
                     className={clsx(
                       'filter-control relative grid aspect-square place-items-center rounded-lg text-sm transition-colors hover:bg-muted',
+                      isBeforeMin && 'cursor-not-allowed opacity-35 hover:bg-transparent',
                       outsideMonth && 'text-muted-foreground/45',
                       inRange && 'bg-info/10 text-info',
                       isSelected &&

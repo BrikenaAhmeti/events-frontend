@@ -9,6 +9,32 @@ import { CreateEventPage } from './CreateEventPage';
 const api = 'http://localhost:3000/api/v1';
 
 describe('CreateEventPage platform administrator flow', () => {
+  it('returns a resumed setup with a past start to the date step instead of allowing creation', async () => {
+    server.use(
+      http.get(`${api}/auth/me`, () => HttpResponse.json({
+        userId: 'creator-a', email: 'creator@example.test', firstName: 'Event', lastName: 'Creator',
+        platformRole: null, memberships: [{ clientId: 'client-a', role: 'CLIENT_ADMIN', status: 'ACTIVE', permissions: ['EVENT_CREATE'] }],
+      })),
+      http.get(`${api}/clients`, () => HttpResponse.json({ items: [
+        { id: 'client-a', name: 'Northstar Events', slug: 'northstar', status: 'ACTIVE' },
+      ] })),
+      http.post(`${api}/events/setup/start`, () => HttpResponse.json({
+        sessionId: 'setup-a', clientId: 'client-a', clientName: 'Northstar Events', resumed: true,
+        draft: { event: {
+          name: 'Past Gathering', category: 'OTHER', description: 'A gathering in Lisbon.',
+          destination: 'Lisbon', startAt: new Date(Date.now() - 3_600_000).toISOString(),
+          endAt: new Date(Date.now() + 3_600_000).toISOString(), timezone: 'Europe/Lisbon',
+          organizerName: 'Morgan Reed', organizerEmail: 'morgan@example.test',
+        }, facts: [], schedule: [], guests: [] },
+      })),
+    );
+    renderApp(<MemoryRouter><CreateEventPage /></MemoryRouter>);
+
+    expect(await screen.findByLabelText('Choose event dates and times')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create event workspace' })).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a future start date and time');
+  });
+
   it.each([
     ['SUPER_ADMIN', 'accept'], ['SUPER_ADMIN', 'reject'],
     ['CLIENT_ADMIN', 'accept'], ['CLIENT_ADMIN', 'reject'],
@@ -32,7 +58,9 @@ describe('CreateEventPage platform administrator flow', () => {
       http.post(`${api}/events/setup/start`, () => HttpResponse.json({
         sessionId: 'setup-a', clientId: client.id, clientName: client.name, resumed: true,
         message: 'Choose an event name to continue.',
-        draft: { event: eventDetails, suggestedName: 'Lisbon Conference', facts: [], schedule: [], guests: [] },
+        draft: { event: eventDetails, suggestedName: 'Lisbon Conference',
+          nameSuggestions: ['Lisbon Conference', 'Leadership in Lisbon', 'Northstar Forum'],
+          facts: [], schedule: [], guests: [] },
       })),
       http.post(`${api}/events/setup/analyze`, async ({ request }) => {
         const data = await request.formData();
@@ -42,6 +70,7 @@ describe('CreateEventPage platform administrator flow', () => {
           sessionId: 'setup-a',
           event: { ...eventDetails, ...(!rejected ? { name: data.get('eventName') ?? 'Lisbon Conference' } : {}) },
           suggestedName: 'Lisbon Conference', nameSuggestionRejected: rejected,
+          nameSuggestions: rejected ? [] : ['Lisbon Conference', 'Leadership in Lisbon', 'Northstar Forum'],
           message: rejected ? 'Enter the event name below.' : 'Everything required is ready.',
           facts: [], schedule: [], guests: [], extractedFacts: 0, extractedScheduleItems: 0,
         });
@@ -53,9 +82,11 @@ describe('CreateEventPage platform administrator flow', () => {
       await userEvent.click(screen.getByRole('option', { name: client.name }));
       await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
     }
-    expect(await screen.findByText('Lisbon Conference')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Lisbon Conference' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Leadership in Lisbon' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Northstar Forum' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Create event workspace' })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: decision === 'accept' ? 'Accept name' : 'Reject' }));
+    await userEvent.click(screen.getByRole('button', { name: decision === 'accept' ? 'Leadership in Lisbon' : 'Other — write my own' }));
     if (decision === 'reject') {
       const nameInput = await screen.findByLabelText('What should this event be called?');
       await userEvent.type(nameInput, 'Our custom forum', { delay: 5 });
@@ -64,9 +95,69 @@ describe('CreateEventPage platform administrator flow', () => {
     }
     expect(await screen.findByRole('button', { name: 'Create event workspace' })).toBeEnabled();
     expect(requests[0]?.get('nameDecision')).toBe(decision);
+    if (decision === 'accept') expect(requests[0]?.get('eventName')).toBe('Leadership in Lisbon');
     if (decision === 'reject') expect(requests[1]?.get('eventName')).toBe('Our custom forum');
     expect(requests.every((data) => data.get('clientId') === client.id && data.get('sessionId') === 'setup-a')).toBe(true);
   });
+
+  it('lets the creator reject the final summary, correct a location, and confirm the revised event', async () => {
+    const initialEvent = {
+      name: 'Prishtina Remembers', category: 'MEMORIAL',
+      description: 'A commemoration of people killed in the war for freedom.',
+      destination: 'Prishtina', startAt: '2027-06-12T08:00:00.000Z',
+      endAt: '2027-06-12T10:00:00.000Z', timezone: 'Europe/Belgrade',
+      organizerName: 'Morgan Reed', organizerEmail: 'morgan@example.test',
+    };
+    const requests: string[] = [];
+    let createdEvent: Record<string, unknown> | undefined;
+    server.use(
+      http.get(`${api}/auth/me`, () => HttpResponse.json({
+        userId: 'creator-a', email: 'creator@example.test', firstName: 'Event', lastName: 'Creator',
+        platformRole: null, memberships: [{ clientId: 'client-a', role: 'CLIENT_ADMIN', status: 'ACTIVE', permissions: ['EVENT_CREATE'] }],
+      })),
+      http.get(`${api}/clients`, () => HttpResponse.json({ items: [
+        { id: 'client-a', name: 'Northstar Events', slug: 'northstar', status: 'ACTIVE' },
+      ] })),
+      http.post(`${api}/events/setup/start`, () => HttpResponse.json({
+        sessionId: 'setup-a', clientId: 'client-a', clientName: 'Northstar Events', resumed: true,
+        messages: [{ id: 'welcome-a', role: 'CONCIERGE', content: 'Please review the event.' }],
+        draft: { event: initialEvent, suggestedName: initialEvent.name, facts: [], schedule: [], guests: [] },
+      })),
+      http.post(`${api}/events/setup/analyze`, async ({ request }) => {
+        const data = await request.formData();
+        const text = data.get('text');
+        if (typeof text === 'string') requests.push(text);
+        return HttpResponse.json({
+          sessionId: 'setup-a', event: { ...initialEvent, destination: 'Gjakova' },
+          suggestedName: initialEvent.name, nameWasProvided: true,
+          message: 'I changed the location to Gjakova. Please review the details.',
+          facts: [], schedule: [], guests: [], extractedFacts: 0, extractedScheduleItems: 0,
+        });
+      }),
+      http.post(`${api}/events`, async ({ request }) => {
+        createdEvent = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ id: 'event-a' });
+      }),
+    );
+    renderApp(<MemoryRouter initialEntries={['/app/events/new']}>
+      <Routes>
+        <Route path="/app/events/new" element={<CreateEventPage />} />
+        <Route path="/app/events/:eventId/concierge" element={<p>Event created</p>} />
+      </Routes>
+    </MemoryRouter>);
+
+    expect(await screen.findByText('Are these event details correct?')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'No, change something' }));
+    expect(screen.queryByRole('button', { name: 'Create event workspace' })).not.toBeInTheDocument();
+    const composer = screen.getByLabelText('Event information');
+    expect(composer).toHaveAttribute('placeholder', expect.stringContaining('Tell me what to change'));
+    await userEvent.type(composer, 'Change the location to Gjakova{Enter}');
+    await waitFor(() => expect(requests).toEqual(['Change the location to Gjakova']));
+    expect(await screen.findByText('Gjakova')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Create event workspace' }));
+    await waitFor(() => expect(createdEvent?.destination).toBe('Gjakova'));
+  });
+
   it('keeps setup usable when a successful response omits messages and draft', async () => {
     server.use(
       http.get(`${api}/auth/me`, () => HttpResponse.json({
@@ -672,9 +763,11 @@ describe('CreateEventPage platform administrator flow', () => {
     expect(screen.queryByLabelText('Live event brief')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /^Event dates:/ }));
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
     const day = new Intl.DateTimeFormat('en', {
       weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
-    }).format(new Date());
+    }).format(tomorrow);
     await userEvent.click(screen.getByRole('gridcell', { name: day }));
     await userEvent.type(screen.getByLabelText('Start time'), '09:00');
     await userEvent.type(screen.getByLabelText('End time'), '18:00');

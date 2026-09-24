@@ -154,7 +154,7 @@ const emptyDraft: Draft = {
   organizerEmail: '',
 };
 
-const evaluateDraft = (draft: Draft): EventCompleteness => {
+const evaluateDraft = (draft: Draft, now: number): EventCompleteness => {
   const required: Array<[string, string]> = [
     ['name', draft.name],
     ['category', draft.category],
@@ -168,6 +168,8 @@ const evaluateDraft = (draft: Draft): EventCompleteness => {
   ];
   const missing = required.filter(([, value]) => !value.trim()).map(([field]) => field);
   const warnings: string[] = [];
+  if (draft.startAt && Date.parse(draft.startAt) <= now)
+    warnings.push('startInPast');
   if (draft.startAt && draft.endAt && new Date(draft.endAt) <= new Date(draft.startAt))
     warnings.push('endBeforeStart');
   if (draft.timezone) {
@@ -213,6 +215,7 @@ export function CreateEventPage() {
   const [nameInput, setNameInput] = useState('');
   const [correctionRequested, setCorrectionRequested] = useState(false);
   const [reviewed, setReviewed] = useState(false);
+  const [now, setNow] = useState(Date.now);
   const [dateHints, setDateHints] = useState({ startDate: '', endDate: '' });
   const [documentReviewPending, setDocumentReviewPending] = useState(false);
   const [selectedClientMessage, setSelectedClientMessage] = useState('');
@@ -353,7 +356,10 @@ export function CreateEventPage() {
           template: result.template?.kind,
         },
       ]);
-      if (Object.entries(result.event).some(([key, value]) => value !== draft[key as keyof Draft]))
+      if (Object.entries(result.event).some(([key, value]) => value !== draft[key as keyof Draft]) ||
+        JSON.stringify(result.facts ?? []) !== JSON.stringify(analyzedContent.facts) ||
+        JSON.stringify(result.schedule ?? []) !== JSON.stringify(analyzedContent.schedule) ||
+        JSON.stringify(result.guests ?? []) !== JSON.stringify(analyzedContent.guests))
         setCorrectionRequested(false);
     },
     onSettled: restoreComposerFocus,
@@ -431,10 +437,16 @@ export function CreateEventPage() {
     event.preventDefault();
     submitBrief();
   };
-  const draftCompleteness = evaluateDraft(draft);
+  const draftCompleteness = evaluateDraft(draft, now);
   const canSubmit = Boolean(clientId && sessionId) && draftCompleteness.ready && !documentReviewPending;
   const guidedStep = getGuidedSetupStep(draftCompleteness);
   const composerDisabled = !setupReady || start.isPending || analyze.isPending || create.isPending;
+  useEffect(() => {
+    if (!draft.startAt) return;
+    setNow(Date.now());
+    const interval = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(interval);
+  }, [draft.startAt]);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const log = chatLogRef.current;
@@ -720,7 +732,7 @@ function getGuidedSetupStep(completeness: EventCompleteness): GuidedSetupStep {
   if (
     ['startAt', 'endAt', 'timezone'].some((field) => missing.has(field)) ||
     completeness.warnings.some((warning) =>
-      ['endBeforeStart', 'invalidTimezone'].includes(warning),
+      ['endBeforeStart', 'invalidTimezone', 'startInPast'].includes(warning),
     )
   )
     return 'dates';
@@ -796,7 +808,7 @@ function EventDraftSummary({
           label={t('dateRange')}
           value={
             draft.startAt
-              ? `${formatDraftDate(draft.startAt, draft.timezone)}${draft.endAt ? ` – ${formatDraftDate(draft.endAt, draft.timezone)}` : ''}`
+              ? `${formatDraftDate(draft.startAt, draft.timezone)}${draft.endAt ? ` – ${formatDraftDate(draft.endAt, draft.timezone)}` : ''} (${draft.timezone})`
               : t('waitingForAnswer')
           }
         />

@@ -6,6 +6,17 @@ import { EventDateRangeCard } from './EventDateRangeCard';
 import { renderApp } from '../../test/render';
 
 describe('event date range conversion', () => {
+  it('rejects a start time in the past even when the end is later', async () => {
+    const onSubmit = vi.fn();
+    const startAt = new Date(Date.now() - 3_600_000).toISOString();
+    const endAt = new Date(Date.now() + 3_600_000).toISOString();
+    renderApp(<EventDateRangeCard value={{ startAt, endAt, timezone: 'UTC' }} onSubmit={onSubmit} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose a future start date and time');
+    await userEvent.click(screen.getByRole('button', { name: 'Use these dates' }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it('converts event-local dates and times to UTC without inventing missing times', () => {
     expect(localDateTimeToUtc('2026-09-22T09:00', 'Europe/Rome')).toBe('2026-09-22T07:00:00.000Z');
     expect(localDateTimeToUtc('2026-09-23T18:00', 'Europe/Rome')).toBe('2026-09-23T16:00:00.000Z');
@@ -19,8 +30,8 @@ describe('event date range conversion', () => {
     renderApp(
       <EventDateRangeCard
         value={{
-          startAt: '2026-09-22T07:00:00.000Z',
-          endAt: '2026-09-23T16:00:00.000Z',
+          startAt: '2030-09-22T07:00:00.000Z',
+          endAt: '2030-09-23T16:00:00.000Z',
           timezone: 'Europe/Rome',
         }}
         onSubmit={onSubmit}
@@ -30,8 +41,8 @@ describe('event date range conversion', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Use these dates' }));
 
     expect(onSubmit).toHaveBeenCalledWith({
-      startAt: '2026-09-22T07:00:00.000Z',
-      endAt: '2026-09-23T16:00:00.000Z',
+      startAt: '2030-09-22T07:00:00.000Z',
+      endAt: '2030-09-23T16:00:00.000Z',
       timezone: 'Europe/Rome',
     });
   });
@@ -43,8 +54,8 @@ describe('event date range conversion', () => {
         value={{
           startAt: '',
           endAt: '',
-          startDate: '2026-09-22',
-          endDate: '2026-09-23',
+          startDate: '2030-09-22',
+          endDate: '2030-09-23',
           timezone: 'Europe/Rome',
         }}
         onSubmit={onSubmit}
@@ -62,8 +73,8 @@ describe('event date range conversion', () => {
     await user.click(screen.getByRole('button', { name: 'Use these dates' }));
 
     expect(onSubmit).toHaveBeenCalledWith({
-      startAt: '2026-09-22T07:00:00.000Z',
-      endAt: '2026-09-23T16:00:00.000Z',
+      startAt: '2030-09-22T07:00:00.000Z',
+      endAt: '2030-09-23T16:00:00.000Z',
       timezone: 'Europe/Rome',
     });
   });
