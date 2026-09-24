@@ -2,9 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, MapPin } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ConciergeWorkspace } from '../../components/organisms/ConciergeWorkspace';
-import { apiClient } from '../../lib/api/api-client';
+import { ApiError, apiClient } from '../../lib/api/api-client';
 import type { ScheduleItem } from '../../types/domain';
 import { GuestAccessState, guestAccessStateFromError } from './GuestAccessState';
 
@@ -32,6 +32,7 @@ type GuestEvent = {
 export function GuestEventPage() {
   const { t } = useTranslation('guest');
   const { eventId = '' } = useParams();
+  const navigate = useNavigate();
   const [now, setNow] = useState(Date.now);
   const event = useQuery({
     queryKey: ['guest-event', eventId],
@@ -39,6 +40,18 @@ export function GuestEventPage() {
     retry: false,
     refetchInterval: 30_000,
   });
+  const needsConfirmation = event.error instanceof ApiError &&
+    ['GUEST_SESSION_REQUIRED', 'GUEST_SESSION_INVALID', 'GUEST_ACCESS_DENIED'].includes(event.error.response.code);
+  const eventLink = useQuery({
+    queryKey: ['public-event-link', eventId],
+    queryFn: ({ signal }) => apiClient.get<{ slug: string }>(`/public/event-links/${eventId}`, signal),
+    enabled: needsConfirmation,
+    retry: false,
+  });
+  useEffect(() => {
+    if (needsConfirmation && eventLink.data?.slug)
+      void navigate(`/e/${encodeURIComponent(eventLink.data.slug)}`, { replace: true });
+  }, [needsConfirmation, eventLink.data?.slug, navigate]);
   const closesAt = event.data?.accessClosesAt ? Date.parse(event.data.accessClosesAt) : undefined;
   useEffect(() => {
     if (closesAt === undefined || closesAt <= now) return;
@@ -47,6 +60,9 @@ export function GuestEventPage() {
   }, [closesAt, now]);
   const state = guestAccessStateFromError(event.error);
   if (state) return <GuestAccessState state={state} />;
+  if (needsConfirmation && (eventLink.isPending || eventLink.data)) {
+    return <div className="grid min-h-[70vh] place-items-center">{t('loadingEvent')}</div>;
+  }
   if (closesAt !== undefined && now >= closesAt) return <GuestAccessState state="ENDED" eventName={event.data?.name} />;
   if (!event.data || event.isError) {
     return (
