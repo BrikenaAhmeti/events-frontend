@@ -63,6 +63,7 @@ type SetupAnalysis = {
   event: Partial<Draft>;
   dateHints?: { startDate: string; endDate: string };
   suggestedName: string;
+  nameSuggestions?: string[];
   nameWasProvided: boolean;
   nameSuggestionRejected?: boolean;
   completeness: EventCompleteness;
@@ -108,6 +109,7 @@ type SetupStart = {
     guests: SetupAnalysis['guests'];
     documentReviewPending?: boolean;
     suggestedName: string;
+    nameSuggestions?: string[];
     nameWasProvided: boolean;
     nameSuggestionRejected?: boolean;
   };
@@ -206,9 +208,10 @@ export function CreateEventPage() {
   const [source, setSource] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
-  const [suggestedName, setSuggestedName] = useState('');
+  const [nameSuggestions, setNameSuggestions] = useState<string[]>([]);
   const [nameSuggestionRejected, setNameSuggestionRejected] = useState(false);
   const [nameInput, setNameInput] = useState('');
+  const [correctionRequested, setCorrectionRequested] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [dateHints, setDateHints] = useState({ startDate: '', endDate: '' });
   const [documentReviewPending, setDocumentReviewPending] = useState(false);
@@ -254,9 +257,10 @@ export function CreateEventPage() {
             text: result.message?.trim() || t('setupWelcomeFallback'),
           }]);
       const restored = result.draft;
-      setSuggestedName(restored?.suggestedName ?? '');
+      setNameSuggestions(restored?.nameSuggestions?.length ? restored.nameSuggestions : restored?.suggestedName ? [restored.suggestedName] : []);
       setNameSuggestionRejected(Boolean(restored?.nameSuggestionRejected));
       setNameInput('');
+      setCorrectionRequested(false);
       const restoredEvent = restored?.event ?? {};
       setDraft({
         ...emptyDraft,
@@ -319,7 +323,7 @@ export function CreateEventPage() {
       setFile(submission.file);
     },
     onSuccess: (result) => {
-      setSuggestedName(result.suggestedName ?? '');
+      setNameSuggestions(result.nameSuggestions?.length ? result.nameSuggestions : result.suggestedName ? [result.suggestedName] : []);
       setNameSuggestionRejected(Boolean(result.nameSuggestionRejected));
       if (result.event.name) setNameInput('');
       setDraft({
@@ -349,6 +353,8 @@ export function CreateEventPage() {
           template: result.template?.kind,
         },
       ]);
+      if (Object.entries(result.event).some(([key, value]) => value !== draft[key as keyof Draft]))
+        setCorrectionRequested(false);
     },
     onSettled: restoreComposerFocus,
   });
@@ -380,9 +386,10 @@ export function CreateEventPage() {
     start.reset();
     analyze.reset();
     setDraft(emptyDraft);
-    setSuggestedName('');
+    setNameSuggestions([]);
     setNameSuggestionRejected(false);
     setNameInput('');
+    setCorrectionRequested(false);
     setReviewed(false);
     setDocumentReviewPending(false);
     setDateHints({ startDate: '', endDate: '' });
@@ -541,7 +548,7 @@ export function CreateEventPage() {
           )}
           {analyze.isPending && <TypingBubble label={t('reviewingEventInformation')} />}
           {analyze.error && <ChatBubble danger>{analyze.error.message}</ChatBubble>}
-          {setupReady && reviewed && !draft.name && suggestedName && !documentReviewPending && !analyze.isPending && (
+          {setupReady && reviewed && !draft.name && (nameSuggestions.length > 0 || nameSuggestionRejected) && !documentReviewPending && !analyze.isPending && (
             <ChatBubble>
               {nameSuggestionRejected ? (
                 <form onSubmit={(event) => {
@@ -559,15 +566,16 @@ export function CreateEventPage() {
                 </form>
               ) : (
                 <>
-                  <p className="text-sm text-muted-foreground">{t('nameSuggestion')}</p>
-                  <p className="mt-2 font-semibold">{suggestedName}</p>
-                  <div className="mt-3 flex gap-2">
-                    <Button disabled={composerDisabled} onClick={() => analyze.mutate({
-                      text: `${t('acceptName')}: ${suggestedName}`, file: null, nameDecision: 'accept',
-                    })}>{t('acceptName')}</Button>
+                  <p className="text-sm text-muted-foreground">{t('nameSuggestionsPrompt')}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {nameSuggestions.map((name) => (
+                      <Button key={name} variant="secondary" disabled={composerDisabled} onClick={() => analyze.mutate({
+                        text: `${t('useThisName')}: ${name}`, file: null, nameDecision: 'accept', eventName: name,
+                      })}>{name}</Button>
+                    ))}
                     <Button variant="secondary" disabled={composerDisabled} onClick={() => analyze.mutate({
-                      text: t('rejectName'), file: null, nameDecision: 'reject',
-                    })}>{t('rejectName')}</Button>
+                      text: t('otherName'), file: null, nameDecision: 'reject',
+                    })}>{t('otherName')}</Button>
                   </div>
                 </>
               )}
@@ -613,6 +621,11 @@ export function CreateEventPage() {
                 createError={create.error?.message}
                 createPending={create.isPending}
                 canSubmit={canSubmit}
+                correctionRequested={correctionRequested}
+                onRequestCorrection={() => {
+                  setCorrectionRequested(true);
+                  composerRef.current?.focus({ preventScroll: true });
+                }}
                 onCreate={() => create.mutate()}
               />
             </ChatBubble>
@@ -640,7 +653,7 @@ export function CreateEventPage() {
                   : documentReviewPending
                     ? t('documentReviewPlaceholder')
                     : reviewed
-                      ? setupComposerPlaceholder(guidedStep, t)
+                      ? correctionRequested ? t('correctionChatPlaceholder') : setupComposerPlaceholder(guidedStep, t)
                       : t('eventBriefPlaceholder')
               }
               maxLength={80_000}
@@ -736,6 +749,8 @@ function EventDraftSummary({
   createError,
   createPending,
   canSubmit,
+  correctionRequested,
+  onRequestCorrection,
   onCreate,
 }: {
   draft: Draft;
@@ -746,6 +761,8 @@ function EventDraftSummary({
   createError?: string;
   createPending: boolean;
   canSubmit: boolean;
+  correctionRequested: boolean;
+  onRequestCorrection: () => void;
   onCreate: () => void;
 }) {
   const { t } = useTranslation('events');
@@ -772,7 +789,7 @@ function EventDraftSummary({
         <SummaryItem
           icon={MapPin}
           label={t('location')}
-          value={[draft.venue, draft.destination].filter(Boolean).join(', ') || t('waitingForAnswer')}
+          value={[draft.venue, draft.venueAddress, draft.destination].filter(Boolean).join(', ') || t('waitingForAnswer')}
         />
         <SummaryItem
           icon={CalendarDays}
@@ -814,14 +831,18 @@ function EventDraftSummary({
       <div className="mt-5">
         <CompletenessPanel completeness={completeness} />
       </div>
-      <p className="mt-4 text-sm leading-6 text-muted-foreground">
-        {canSubmit ? t('chatReviewReady') : t('chatKeepAnswering')}
-      </p>
+      <p className="mt-4 text-sm leading-6 font-semibold">{t('finalConfirmationPrompt')}</p>
+      <p className="mt-1 text-sm leading-6 text-muted-foreground">{t('finalConfirmationHelp')}</p>
       {createError && <p className="mt-4 text-sm text-danger">{createError}</p>}
       {canSubmit && (
-        <Button className="mt-5 w-full sm:w-auto" size="lg" loading={createPending} onClick={onCreate}>
-          {t('continue')}
-        </Button>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {!correctionRequested && <Button size="lg" loading={createPending} onClick={onCreate}>
+            {t('continue')}
+          </Button>}
+          <Button size="lg" variant="secondary" disabled={createPending} onClick={onRequestCorrection}>
+            {t('changeEventDetails')}
+          </Button>
+        </div>
       )}
     </div>
   );
