@@ -180,6 +180,7 @@ export const en = {
     confirmDocumentDetailsPrompt:
       'Review the details extracted from your document. Confirm them here, or type corrections in the chat before continuing.',
     confirmDocumentDetails: 'Confirm extracted details',
+    documentReviewPlaceholder: 'Confirm the details above, or tell me what to correct…',
     eventBriefTemplate: 'Fillable event brief',
     eventBriefTemplateDescription:
       'Choose the format that is easiest for your team to complete and upload here.',

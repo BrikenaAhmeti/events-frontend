@@ -91,11 +91,12 @@ describe('CreateEventPage platform administrator flow', () => {
     expect(screen.queryByText("Cannot read properties of undefined (reading 'map')")).not.toBeInTheDocument();
   });
 
-  it('keeps a document-based event in chat until extracted details are confirmed', async () => {
+  it.each([false, true])('confirms document details before proceeding (missing dates: %s)', async (missingDates) => {
     const readyEvent = {
       name: 'Leadership Forum', category: 'CONFERENCE',
       description: 'A leadership forum.', destination: 'Lisbon',
-      startAt: '2027-10-12T08:00:00.000Z', endAt: '2027-10-12T18:00:00.000Z',
+      startAt: missingDates ? '' : '2027-10-12T08:00:00.000Z',
+      endAt: missingDates ? '' : '2027-10-12T18:00:00.000Z',
       timezone: 'Europe/Lisbon', organizerName: 'Morgan Reed',
       organizerEmail: 'morgan@example.test',
     };
@@ -136,9 +137,17 @@ describe('CreateEventPage platform administrator flow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
     const confirm = await screen.findByRole('button', { name: 'Confirm extracted details' });
     expect(screen.queryByRole('button', { name: 'Create event workspace' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Start date and time hour')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Event information')).toHaveAttribute('placeholder',
+      'Confirm the details above, or tell me what to correct…');
     await userEvent.click(confirm);
     await waitFor(() => expect(texts).toEqual(['Confirm details']));
-    expect(await screen.findByRole('button', { name: 'Create event workspace' })).toBeInTheDocument();
+    if (missingDates) {
+      expect(await screen.findByLabelText('Start date and time hour')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Create event workspace' })).not.toBeInTheDocument();
+    } else {
+      expect(await screen.findByRole('button', { name: 'Create event workspace' })).toBeEnabled();
+    }
   });
 
   it('creates an event on behalf of the selected client', async () => {

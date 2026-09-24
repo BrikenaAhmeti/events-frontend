@@ -559,7 +559,7 @@ export function CreateEventPage() {
               )}
             </ChatBubble>
           )}
-          {setupReady && reviewed && guidedStep === 'dates' && !analyze.isPending && (
+          {setupReady && reviewed && !documentReviewPending && guidedStep === 'dates' && !analyze.isPending && (
             <ChatBubble wide>
               <EventDateRangeCard
                 value={{ startAt: draft.startAt, endAt: draft.endAt, timezone: draft.timezone,
@@ -620,9 +620,11 @@ export function CreateEventPage() {
               placeholder={
                 !setupReady
                   ? t('saveClientBeforeWriting')
-                  : reviewed
-                    ? setupComposerPlaceholder(guidedStep, t)
-                    : t('eventBriefPlaceholder')
+                  : documentReviewPending
+                    ? t('documentReviewPlaceholder')
+                    : reviewed
+                      ? setupComposerPlaceholder(guidedStep, t)
+                      : t('eventBriefPlaceholder')
               }
               maxLength={80_000}
               disabled={composerDisabled}
