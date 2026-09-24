@@ -650,7 +650,7 @@ export const en = {
     deactivated: 'Client deactivated.',
   },
   guest: {
-    confirmTogether: 'Before we begin, confirm your full name and the email used for your invitation in one message. For example: Avery Stone, avery@example.com.',
+    confirmTogether: 'To enter from a shared event link or QR code, confirm your full name and the email on the guest list. For example: Avery Stone, avery@example.com.',
     identityMessage: 'Your full name and email',
     identityExample: 'Avery Stone, avery@example.com',
     identityInvalid: 'Enter your full name and one valid email address, separated by a comma.',
