@@ -6,6 +6,8 @@ import { Button } from '../atoms/Button';
 import { Textarea } from '../atoms/Input';
 import { AssistantMessage, TypingIndicator, UserMessage } from '../molecules/ChatMessage';
 import { GuestRowsCard } from './GuestRowsCard';
+import { GuestImportDialog } from '../../features/guests/GuestImportDialog';
+import { downloadGuestTemplate, type GuestImportPreview, type GuestImportRow } from '../../features/guests/guest-import';
 import { apiClient } from '../../lib/api/api-client';
 import { documentKeys, eventKeys, guestKeys, invitationKeys } from '../../lib/api/query-keys';
 import { useEventSocket } from '../../lib/websocket/use-event-socket';
@@ -26,6 +28,7 @@ export function ConciergeWorkspace({
   guest = false,
   allowPlanning = false,
   allowGuestManage = false,
+  allowGuestImport = false,
   allowPublish = false,
   allowUpload = false,
   eventStatus,
@@ -37,6 +40,7 @@ export function ConciergeWorkspace({
   guest?: boolean;
   allowPlanning?: boolean;
   allowGuestManage?: boolean;
+  allowGuestImport?: boolean;
   allowPublish?: boolean;
   allowUpload?: boolean;
   eventStatus?: 'DRAFT' | 'READY' | 'PUBLISHED' | 'CANCELLED' | 'ARCHIVED';
@@ -48,10 +52,13 @@ export function ConciergeWorkspace({
   const [message, setMessage] = useState('');
   const [step, setStep] = useState<'details' | 'guests' | 'publish'>('details');
   const [guestRowsPending, setGuestRowsPending] = useState(false);
+  const [guestPreview, setGuestPreview] = useState<GuestImportPreview | null>(null);
+  const [publishWithInvitations, setPublishWithInvitations] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasStreamingText, setHasStreamingText] = useState(false);
   const sharingAccess = Boolean(shareAccess && messages.length === 0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const guestFileRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const chatLogRef = useRef<HTMLDivElement>(null);
   const streamErrorShown = useRef(false);
@@ -166,8 +173,22 @@ export function ConciergeWorkspace({
       ]);
     },
   });
+  const previewGuests = useMutation({
+    mutationFn: (file: File) => apiClient.upload<GuestImportPreview>(`/events/${eventId}/guests/imports/preview`, file),
+    onSuccess: setGuestPreview,
+  });
+  const importGuests = useMutation({
+    mutationFn: ({ rows }: { rows: GuestImportRow[]; sendOnPublish: boolean }) => apiClient.post<{ accepted: number }>(`/events/${eventId}/guests/imports/confirm`, { rows }),
+    onSuccess: (result, options) => {
+      setGuestPreview(null);
+      setPublishWithInvitations(options.sendOnPublish);
+      setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'CONCIERGE', content: t('guestsImportedInChat', { count: result.accepted }) }]);
+      void queryClient.invalidateQueries({ queryKey: eventKeys.detail(eventId) });
+      void queryClient.invalidateQueries({ queryKey: guestKeys.list(eventId) });
+    },
+  });
   const publish = useMutation({
-    mutationFn: () => apiClient.post<{ invitationsQueued: number }>(`/events/${eventId}/publish`),
+    mutationFn: (sendInvitations: boolean) => apiClient.post<{ invitationsQueued: number }>(`/events/${eventId}/publish`, { sendInvitations }),
     onSuccess: (result) => {
       setMessages((current) => [...current, {
         id: crypto.randomUUID(), role: 'CONCIERGE', content: t('publishedInChat', { count: result.invitationsQueued ?? 0 }),
@@ -307,12 +328,19 @@ export function ConciergeWorkspace({
               )}
               {step === 'guests' && (
                 <>
-                  <p>{allowGuestManage ? t('guestChatPrompt') : t('guestPermissionPrompt')}</p>
+                  <p>{allowGuestManage || allowGuestImport ? t('guestChatPrompt') : t('guestPermissionPrompt')}</p>
                   <p className="font-semibold">{t('guestCount', { count: guestCount })}</p>
                   {allowGuestManage && <GuestRowsCard eventId={eventId} onPendingChange={setGuestRowsPending} onSaved={() => {
                     void queryClient.invalidateQueries({ queryKey: eventKeys.detail(eventId) });
                     void queryClient.invalidateQueries({ queryKey: guestKeys.list(eventId) });
                   }} />}
+                  {allowGuestImport && <div className="flex flex-wrap gap-2">
+                    <input ref={guestFileRef} type="file" accept=".csv,.xlsx" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) previewGuests.mutate(file); event.target.value = ''; }} />
+                    <Button type="button" variant="secondary" loading={previewGuests.isPending} onClick={() => guestFileRef.current?.click()}>{t('uploadGuestList')}</Button>
+                    <Button type="button" variant="quiet" onClick={() => void downloadGuestTemplate('csv')}>{t('csvGuestTemplate')}</Button>
+                    <Button type="button" variant="quiet" onClick={() => void downloadGuestTemplate('xlsx')}>{t('excelGuestTemplate')}</Button>
+                  </div>}
+                  {previewGuests.error && <p role="alert" className="text-danger">{previewGuests.error.message}</p>}
                   {guestRowsPending && <p className="text-xs text-muted-foreground">{t('saveGuestBeforePublish')}</p>}
                   <Button type="button" disabled={guestRowsPending} onClick={() => setStep('publish')}>
                     {t('continueToPublish')}
@@ -323,16 +351,19 @@ export function ConciergeWorkspace({
                 <>
                   <p>{t('publishChatPrompt', { count: guestCount })}</p>
                   {publish.error && <p role="alert" className="text-danger">{publish.error.message}</p>}
-                  {allowPublish ? (
-                    <Button type="button" loading={publish.isPending} onClick={() => publish.mutate()}>
-                      {t('publishEvent')}
-                    </Button>
-                  ) : <p>{t('publishPermissionPrompt')}</p>}
+                  {allowPublish ? <>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant={publishWithInvitations ? 'primary' : 'secondary'} onClick={() => setPublishWithInvitations(true)}>{t('publishAndSend')}</Button>
+                      <Button type="button" variant={!publishWithInvitations ? 'primary' : 'secondary'} onClick={() => setPublishWithInvitations(false)}>{t('publishWithoutSending')}</Button>
+                    </div>
+                    <Button type="button" loading={publish.isPending} onClick={() => publish.mutate(publishWithInvitations)}>{t('publishEvent')}</Button>
+                  </> : <p>{t('publishPermissionPrompt')}</p>}
                 </>
               )}
             </div>
           </AssistantMessage>
         )}
+        {guestPreview && <GuestImportDialog preview={guestPreview} close={() => setGuestPreview(null)} confirm={(rows, sendOnPublish) => importGuests.mutate({ rows, sendOnPublish })} loading={importGuests.isPending} canSendNow={false} canSendOnPublish sendDisabledReason={t('guestInvitationsOnPublish')} error={importGuests.error?.message} />}
         {shareAccess && (
           <AssistantMessage wide>
             <div className="w-full">

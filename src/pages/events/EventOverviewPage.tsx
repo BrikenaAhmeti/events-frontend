@@ -49,9 +49,10 @@ export function EventOverviewPage() {
   const { data: user } = useCurrentUser();
   const mayEdit = Boolean(user && event.capabilities.canEdit);
   const mayPublish = Boolean(
-    user && event.capabilities.canEdit && can(user, 'EVENT_PUBLISH', event.clientId),
+    user && (event.capabilities.canPublish ?? event.capabilities.canEdit) && can(user, 'EVENT_PUBLISH', event.clientId),
   );
   const [publishOpen, setPublishOpen] = useState(false);
+  const [sendInvitationsOnPublish, setSendInvitationsOnPublish] = useState<boolean | null>(null);
   const [editing, setEditing] = useState(false);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -96,7 +97,7 @@ export function EventOverviewPage() {
     },
   });
   const publish = useMutation({
-    mutationFn: () => apiClient.post<EventDetail>(`/events/${event.id}/publish`),
+    mutationFn: (sendInvitations: boolean) => apiClient.post<EventDetail>(`/events/${event.id}/publish`, { sendInvitations }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: eventKeys.all });
       showToast(t('publishedToast'));
@@ -364,9 +365,23 @@ export function EventOverviewPage() {
         title={t('publish')}
         description={t('publishConfirm')}
         confirmLabel={t('publish')}
+        confirmDisabled={sendInvitationsOnPublish === null}
+        loading={publish.isPending}
         onClose={() => setPublishOpen(false)}
-        onConfirm={() => publish.mutate()}
-      />
+        onConfirm={() => { if (sendInvitationsOnPublish !== null) publish.mutate(sendInvitationsOnPublish); }}
+      >
+        <div className="mt-4 space-y-2 text-sm">
+          <label className="flex items-start gap-2 rounded-lg border border-border p-3">
+            <input type="radio" name="send-invitations-on-publish" checked={sendInvitationsOnPublish === true} onChange={() => setSendInvitationsOnPublish(true)} />
+            <span>{t('publishAndSend')}</span>
+          </label>
+          <label className="flex items-start gap-2 rounded-lg border border-border p-3">
+            <input type="radio" name="send-invitations-on-publish" checked={sendInvitationsOnPublish === false} onChange={() => setSendInvitationsOnPublish(false)} />
+            <span>{t('publishWithoutSending')}</span>
+          </label>
+        </div>
+        {publish.error && <p role="alert" className="mt-3 text-sm text-danger">{publish.error.message}</p>}
+      </ConfirmDialog>
     </div>
   );
 }

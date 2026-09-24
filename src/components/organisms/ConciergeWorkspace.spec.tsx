@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HttpResponse, http } from 'msw';
 import { ConciergeWorkspace } from './ConciergeWorkspace';
@@ -143,7 +143,7 @@ describe('ConciergeWorkspace', () => {
     );
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    expect(screen.getByText(/Send guest names and email addresses here/)).toBeInTheDocument();
+    expect(screen.getByText(/Add guests here or upload a CSV or Excel guest list/)).toBeInTheDocument();
     await user.type(screen.getByLabelText('Write a message…'), 'Alex Morgan, alex@example.com; Sam Lee, sam@example.com');
     await user.click(screen.getByRole('button', { name: 'Send message' }));
     expect(await screen.findByText('Added 2 guests. Continue to publishing.')).toBeInTheDocument();
@@ -152,5 +152,37 @@ describe('ConciergeWorkspace', () => {
     await user.click(screen.getByRole('button', { name: 'Publish event' }));
     expect(publish).toHaveBeenCalledOnce();
     expect(await screen.findByText(/Event published/)).toBeInTheDocument();
+  });
+
+  it('reviews a CSV in the guest step and can publish without sending invitations', async () => {
+    let publishBody: { sendInvitations?: boolean } | undefined;
+    const imported = vi.fn(() => HttpResponse.json({ accepted: 1 }));
+    server.use(
+      http.get('http://localhost:3000/api/v1/events/event-a/concierge/messages', () => HttpResponse.json({ id: null, messages: [] })),
+      http.post('http://localhost:3000/api/v1/events/event-a/guests/imports/preview', () => HttpResponse.json({
+        mapping: { Name: 'fullName', Email: 'email' },
+        rows: [{ row: 2, values: { Name: 'Avery Stone', Email: 'avery@example.test' }, data: { fullName: 'Avery Stone', email: 'avery@example.test' }, errors: [], duplicate: false }],
+        validRows: [{ fullName: 'Avery Stone', email: 'avery@example.test' }], invalidRows: [], duplicates: [],
+        summary: { total: 1, valid: 1, invalid: 0, duplicates: 0 },
+      })),
+      http.post('http://localhost:3000/api/v1/events/event-a/guests/imports/confirm', imported),
+      http.post('http://localhost:3000/api/v1/events/event-a/publish', async ({ request }) => {
+        publishBody = await request.json() as { sendInvitations?: boolean };
+        return HttpResponse.json({ status: 'PUBLISHED', invitationsQueued: 0 });
+      }),
+    );
+    const rendered = renderApp(<ConciergeWorkspace eventId="event-a" eventStatus="READY" ready allowPlanning allowGuestManage allowGuestImport allowPublish />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    const fileInput = rendered.container.querySelector('input[accept=".csv,.xlsx"]') as HTMLInputElement;
+    await user.upload(fileInput, new File(['Name,Email\nAvery Stone,avery@example.test'], 'guests.csv', { type: 'text/csv' }));
+    await screen.findByRole('dialog', { name: 'Import preview' });
+    await user.click(screen.getByRole('button', { name: 'Add guests only' }));
+    await waitFor(() => expect(imported).toHaveBeenCalledOnce());
+    await screen.findByText(/1 guests added/);
+    await user.click(screen.getByRole('button', { name: 'Continue to publish' }));
+    await user.click(screen.getByRole('button', { name: 'Publish without sending invitations' }));
+    await user.click(screen.getByRole('button', { name: 'Publish event' }));
+    await waitFor(() => expect(publishBody).toEqual({ sendInvitations: false }));
   });
 });
