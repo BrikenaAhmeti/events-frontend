@@ -20,6 +20,9 @@ export function InvitationExchangePage() {
     ),
     enabled: Boolean(invitationToken),
     retry: false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     gcTime: 0,
   });
 

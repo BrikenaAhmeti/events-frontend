@@ -52,4 +52,18 @@ describe('guest entry links', () => {
     await waitFor(() => expect(accessBody).toEqual({ fullName: 'Avery Stone', email: 'avery@example.test' }));
     expect(await screen.findByText('Guest chat opened')).toBeInTheDocument();
   });
+
+  it('shows an unavailable message for an invalid personal token without asking for identity', async () => {
+    server.use(
+      http.post('http://localhost:3000/api/v1/public/invitations/exchange', () => HttpResponse.json({
+        statusCode: 410, code: 'INVITATION_INVALID', message: 'This invitation is invalid.',
+        details: {}, requestId: 'request-a',
+      }, { status: 410 })),
+    );
+    renderApp(<MemoryRouter initialEntries={['/i/invalid-token']}><Routes>
+      <Route path="/i/:invitationToken" element={<InvitationExchangePage />} />
+    </Routes></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: 'Invitation unavailable' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Your full name and email')).not.toBeInTheDocument();
+  });
 });
