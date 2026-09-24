@@ -1,5 +1,5 @@
 import type { ApiErrorShape } from '../../types/domain';
-import { assertUploadSize } from './upload-limits';
+import { assertFunctionUploadSize, MAX_FUNCTION_JSON_BYTES } from './upload-limits';
 
 const environment = import.meta.env as unknown as Record<string, unknown>;
 const API_URL =
@@ -92,6 +92,8 @@ async function request<T>(
   else if (options.body !== undefined) {
     headers.set('Content-Type', 'application/json');
     body = JSON.stringify(options.body);
+    if (new TextEncoder().encode(body).length > MAX_FUNCTION_JSON_BYTES)
+      throw new Error('This request contains too much data. Split the guest list into smaller batches and try again.');
   }
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -182,14 +184,14 @@ export const apiClient = {
   patch: <T>(path: string, body: unknown) => request<T>(path, { method: 'PATCH', body }),
   delete: <T = void>(path: string) => request<T>(path, { method: 'DELETE' }),
   form: <T>(path: string, fields: Record<string, string>, file?: File) => {
-    if (file) assertUploadSize(file);
+    if (file) assertFunctionUploadSize(file);
     const body = new FormData();
     for (const [key, value] of Object.entries(fields)) body.append(key, value);
     if (file) body.append('file', file);
     return request<T>(path, { method: 'POST', body });
   },
   upload: <T>(path: string, file: File) => {
-    assertUploadSize(file);
+    assertFunctionUploadSize(file);
     const body = new FormData();
     body.append('file', file);
     return request<T>(path, { method: 'POST', body });

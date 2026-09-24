@@ -12,6 +12,8 @@ type EventDates = {
   timezone: string;
   startDate?: string;
   endDate?: string;
+  startTime?: string;
+  endTime?: string;
 };
 
 const partsInZone = (value: Date, timezone: string) => {
@@ -78,8 +80,8 @@ export function EventDateRangeCard({
     const to = value.endDate || initialEnd.split('T')[0] || '';
     return from && (!to || from === to) ? { date: from, from: '', to: '' } : { date: '', from, to };
   });
-  const [startTime, setStartTime] = useState(initialStart.split('T')[1] || '');
-  const [endTime, setEndTime] = useState(initialEnd.split('T')[1] || '');
+  const [startTime, setStartTime] = useState(initialStart.split('T')[1] || value.startTime || '');
+  const [endTime, setEndTime] = useState(initialEnd.split('T')[1] || value.endTime || '');
   const [error, setError] = useState('');
   const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [now, setNow] = useState(() => new Date());

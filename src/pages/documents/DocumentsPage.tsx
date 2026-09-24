@@ -9,6 +9,8 @@ import { StatusBadge } from '../../components/molecules/StatusBadge';
 import { can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
 import { apiClient } from '../../lib/api/api-client';
+import { uploadDirectly } from '../../lib/api/direct-upload';
+import { MAX_FUNCTION_UPLOAD_BYTES } from '../../lib/api/upload-limits';
 import { uploadSizeError } from '../../lib/api/upload-limits';
 import { documentKeys } from '../../lib/api/query-keys';
 import type { EventOutletContext } from '../events/EventLayout';
@@ -49,7 +51,12 @@ export function DocumentsPage() {
         : false,
   });
   const upload = useMutation({
-    mutationFn: (file: File) => apiClient.upload(`/events/${event.id}/documents`, file),
+    mutationFn: async (file: File) => {
+      if (file.size <= MAX_FUNCTION_UPLOAD_BYTES)
+        return apiClient.upload(`/events/${event.id}/documents`, file);
+      const ticket = await uploadDirectly(file, `/events/${event.id}/documents/uploads/sign`);
+      return apiClient.post(`/events/${event.id}/documents/uploads/complete`, { ticket });
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: documentKeys.list(event.id) });
       showToast(t('uploaded'));

@@ -35,7 +35,8 @@ import {
   type EventBriefTemplateFormat,
 } from '../../features/events/event-brief-templates';
 import { apiClient } from '../../lib/api/api-client';
-import { uploadSizeError } from '../../lib/api/upload-limits';
+import { uploadDirectly } from '../../lib/api/direct-upload';
+import { MAX_FUNCTION_UPLOAD_BYTES, uploadSizeError } from '../../lib/api/upload-limits';
 import { clientKeys } from '../../lib/api/query-keys';
 import type { Client, EventCompleteness, EventSummary, Page } from '../../types/domain';
 
@@ -62,7 +63,7 @@ type SetupAnalysis = {
   sessionId: string;
   message?: string;
   event: Partial<Draft>;
-  dateHints?: { startDate: string; endDate: string };
+  dateHints?: { startDate: string; endDate: string; startTime?: string; endTime?: string };
   suggestedName: string;
   nameSuggestions?: string[];
   nameWasProvided: boolean;
@@ -104,7 +105,7 @@ type SetupStart = {
   }>;
   draft?: {
     event: Partial<Draft>;
-    dateHints?: { startDate: string; endDate: string };
+    dateHints?: { startDate: string; endDate: string; startTime?: string; endTime?: string };
     facts: SetupAnalysis['facts'];
     schedule: SetupAnalysis['schedule'];
     guests: SetupAnalysis['guests'];
@@ -218,7 +219,7 @@ export function CreateEventPage() {
   const [correctionRequested, setCorrectionRequested] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [now, setNow] = useState(Date.now);
-  const [dateHints, setDateHints] = useState({ startDate: '', endDate: '' });
+  const [dateHints, setDateHints] = useState({ startDate: '', endDate: '', startTime: '', endTime: '' });
   const [documentReviewPending, setDocumentReviewPending] = useState(false);
   const [selectedClientMessage, setSelectedClientMessage] = useState('');
   const [conversation, setConversation] = useState<SetupConversationMessage[]>([]);
@@ -278,7 +279,7 @@ export function CreateEventPage() {
       const hasReviewedDetails = Object.values(restoredEvent).some(Boolean);
       setReviewed(hasReviewedDetails);
       setDocumentReviewPending(Boolean(restored?.documentReviewPending));
-      setDateHints(restored?.dateHints ?? { startDate: '', endDate: '' });
+      setDateHints({ startDate: '', endDate: '', startTime: '', endTime: '', ...restored?.dateHints });
       setAnalyzedContent({
         facts: restored?.facts ?? [],
         schedule: restored?.schedule ?? [],
@@ -293,12 +294,16 @@ export function CreateEventPage() {
     },
   });
   const analyze = useMutation({
-    mutationFn: ({ text, file: submittedFile, startAt, endAt, timezone, nameDecision, eventName }: SetupSubmission) =>
-      apiClient.form<SetupAnalysis>(
+    mutationFn: async ({ text, file: submittedFile, startAt, endAt, timezone, nameDecision, eventName }: SetupSubmission) => {
+      const uploadTicket = submittedFile && submittedFile.size > MAX_FUNCTION_UPLOAD_BYTES
+        ? await uploadDirectly(submittedFile, '/events/setup/uploads/sign', { clientId, sessionId })
+        : undefined;
+      return apiClient.form<SetupAnalysis>(
         '/events/setup/analyze',
         {
           clientId,
           sessionId,
+          ...(uploadTicket ? { uploadTicket } : {}),
           ...(text ? { text } : {}),
           ...(startAt ? { startAt } : {}),
           ...(endAt ? { endAt } : {}),
@@ -306,8 +311,9 @@ export function CreateEventPage() {
           ...(nameDecision ? { nameDecision } : {}),
           ...(eventName ? { eventName } : {}),
         },
-        submittedFile ?? undefined,
-      ),
+        uploadTicket ? undefined : submittedFile ?? undefined,
+      );
+    },
     onMutate: ({ text, file: submittedFile }) => {
       const optimisticId = crypto.randomUUID();
       setConversation((current) => [
@@ -347,7 +353,12 @@ export function CreateEventPage() {
       });
       if (!result.template) setReviewed(true);
       setDocumentReviewPending(Boolean(result.documentReviewPending));
-      if (result.dateHints) setDateHints(result.dateHints);
+      if (result.dateHints) setDateHints({
+        startDate: result.dateHints.startDate,
+        endDate: result.dateHints.endDate,
+        startTime: result.dateHints.startTime ?? '',
+        endTime: result.dateHints.endTime ?? '',
+      });
       setConversation((current) => [
         ...current,
         {
@@ -402,7 +413,7 @@ export function CreateEventPage() {
     setCorrectionRequested(false);
     setReviewed(false);
     setDocumentReviewPending(false);
-    setDateHints({ startDate: '', endDate: '' });
+    setDateHints({ startDate: '', endDate: '', startTime: '', endTime: '' });
     setAnalyzedContent({
       facts: [],
       schedule: [],
@@ -602,9 +613,10 @@ export function CreateEventPage() {
             <div ref={dateCardRef}>
               <ChatBubble wide>
                 <EventDateRangeCard
-                  key={[draft.startAt, draft.endAt, draft.timezone, dateHints.startDate, dateHints.endDate].join('|')}
+                  key={[draft.startAt, draft.endAt, draft.timezone, dateHints.startDate, dateHints.endDate, dateHints.startTime, dateHints.endTime].join('|')}
                   value={{ startAt: draft.startAt, endAt: draft.endAt, timezone: draft.timezone,
-                    startDate: dateHints.startDate, endDate: dateHints.endDate }}
+                    startDate: dateHints.startDate, endDate: dateHints.endDate,
+                    startTime: dateHints.startTime, endTime: dateHints.endTime }}
                   disabled={composerDisabled}
                   onSubmit={({ startAt, endAt, timezone }) => analyze.mutate({
                     text: `The event starts at ${startAt} and ends at ${endAt} in ${timezone}.`,

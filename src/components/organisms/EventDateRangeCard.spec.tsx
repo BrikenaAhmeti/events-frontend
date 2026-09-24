@@ -79,6 +79,31 @@ describe('event date range conversion', () => {
     });
   });
 
+  it('prefills a document schedule so the creator only needs to confirm its timezone', async () => {
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+    renderApp(
+      <EventDateRangeCard
+        value={{
+          startAt: '', endAt: '', startDate: '2030-09-22', endDate: '2030-09-22',
+          startTime: '09:15', endTime: '17:45', timezone: '',
+        }}
+        onSubmit={onSubmit}
+      />,
+    );
+    expect(screen.getByLabelText('Start time')).toHaveValue('09:15');
+    expect(screen.getByLabelText('End time')).toHaveValue('17:45');
+    await user.click(screen.getByRole('button', { name: 'Event timezone' }));
+    await user.type(screen.getByRole('searchbox', { name: 'Search city or timezone' }), 'Rome');
+    await user.click(screen.getByRole('option', { name: 'Europe / Rome' }));
+    await user.click(screen.getByRole('button', { name: 'Use these dates' }));
+    expect(onSubmit).toHaveBeenCalledWith({
+      startAt: '2030-09-22T07:15:00.000Z',
+      endAt: '2030-09-22T15:45:00.000Z',
+      timezone: 'Europe/Rome',
+    });
+  });
+
   it('uses one date for both times, allows exact minutes and searches timezones', async () => {
     const onSubmit = vi.fn();
     const user = userEvent.setup();

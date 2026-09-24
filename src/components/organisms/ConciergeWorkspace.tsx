@@ -10,7 +10,8 @@ import { GuestImportDialog } from '../../features/guests/GuestImportDialog';
 import { guestLanguageLabel, guestLanguageOptions } from '../../features/guest-chat/languages';
 import { downloadGuestTemplate, type GuestImportPreview, type GuestImportRow } from '../../features/guests/guest-import';
 import { apiClient } from '../../lib/api/api-client';
-import { uploadSizeError } from '../../lib/api/upload-limits';
+import { uploadDirectly } from '../../lib/api/direct-upload';
+import { MAX_FUNCTION_UPLOAD_BYTES, uploadSizeError } from '../../lib/api/upload-limits';
 import { documentKeys, eventKeys, guestKeys, invitationKeys } from '../../lib/api/query-keys';
 import { useEventSocket } from '../../lib/websocket/use-event-socket';
 import { CustomSelect } from '../molecules/CustomSelect';
@@ -201,7 +202,12 @@ export function ConciergeWorkspace({
     },
   });
   const previewGuests = useMutation({
-    mutationFn: (file: File) => apiClient.upload<GuestImportPreview>(`/events/${eventId}/guests/imports/preview`, file),
+    mutationFn: async (file: File) => {
+      if (file.size <= MAX_FUNCTION_UPLOAD_BYTES)
+        return apiClient.upload<GuestImportPreview>(`/events/${eventId}/guests/imports/preview`, file);
+      const ticket = await uploadDirectly(file, `/events/${eventId}/guests/imports/sign`);
+      return apiClient.post<GuestImportPreview>(`/events/${eventId}/guests/imports/preview-upload`, { ticket });
+    },
     onSuccess: setGuestPreview,
   });
   const importGuests = useMutation({
@@ -226,7 +232,12 @@ export function ConciergeWorkspace({
     },
   });
   const upload = useMutation({
-    mutationFn: (file: File) => apiClient.upload(`/events/${eventId}/documents`, file),
+    mutationFn: async (file: File) => {
+      if (file.size <= MAX_FUNCTION_UPLOAD_BYTES)
+        return apiClient.upload(`/events/${eventId}/documents`, file);
+      const ticket = await uploadDirectly(file, `/events/${eventId}/documents/uploads/sign`);
+      return apiClient.post(`/events/${eventId}/documents/uploads/complete`, { ticket });
+    },
     onSuccess: () => {
       setMessages((current) => [
         ...current,

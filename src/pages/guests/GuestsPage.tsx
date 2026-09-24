@@ -16,6 +16,8 @@ import { useCurrentUser } from '../../features/auth/use-current-user';
 import { GuestImportDialog } from '../../features/guests/GuestImportDialog';
 import { downloadGuestTemplate, type GuestImportPreview, type GuestImportRow } from '../../features/guests/guest-import';
 import { apiClient } from '../../lib/api/api-client';
+import { uploadDirectly } from '../../lib/api/direct-upload';
+import { MAX_FUNCTION_UPLOAD_BYTES } from '../../lib/api/upload-limits';
 import { uploadSizeError } from '../../lib/api/upload-limits';
 import { guestKeys, invitationKeys } from '../../lib/api/query-keys';
 import type { Page } from '../../types/domain';
@@ -64,8 +66,12 @@ export function GuestsPage() {
   });
   const guestItems = guests.data?.pages.flatMap((page) => page.items) ?? [];
   const previewImport = useMutation({
-    mutationFn: (file: File) =>
-      apiClient.upload<GuestImportPreview>(`/events/${event.id}/guests/imports/preview`, file),
+    mutationFn: async (file: File) => {
+      if (file.size <= MAX_FUNCTION_UPLOAD_BYTES)
+        return apiClient.upload<GuestImportPreview>(`/events/${event.id}/guests/imports/preview`, file);
+      const ticket = await uploadDirectly(file, `/events/${event.id}/guests/imports/sign`);
+      return apiClient.post<GuestImportPreview>(`/events/${event.id}/guests/imports/preview-upload`, { ticket });
+    },
     onSuccess: setPreview,
     onError: (error) => showToast(error.message, 'danger'),
   });

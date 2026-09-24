@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { apiClient } from './api-client';
 import { server } from '../../test/server';
-import { MAX_UPLOAD_BYTES } from './upload-limits';
+import { MAX_FUNCTION_UPLOAD_BYTES } from './upload-limits';
 
 const api = 'http://localhost:3000/api/v1';
 
@@ -103,8 +103,8 @@ describe('apiClient CSRF recovery', () => {
 
 describe('apiClient upload limits', () => {
   it('rejects oversized multipart files before requesting CSRF or sending a request', () => {
-    const file = new File([new Uint8Array(MAX_UPLOAD_BYTES + 1)], 'brief.docx');
-    expect(() => apiClient.upload('/events/event-a/documents', file)).toThrow('Files must be 4 MB or smaller.');
-    expect(() => apiClient.form('/events/setup/analyze', { sessionId: 'setup-a' }, file)).toThrow('Files must be 4 MB or smaller.');
+    const file = new File([new Uint8Array(MAX_FUNCTION_UPLOAD_BYTES + 1)], 'brief.docx');
+    expect(() => apiClient.upload('/events/event-a/documents', file)).toThrow('This file needs a secure direct upload.');
+    expect(() => apiClient.form('/events/setup/analyze', { sessionId: 'setup-a' }, file)).toThrow('This file needs a secure direct upload.');
   });
 });

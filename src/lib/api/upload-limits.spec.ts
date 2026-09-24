@@ -7,7 +7,7 @@ describe('upload limits', () => {
 
     expect(uploadSizeError(atLimit)).toBeNull();
     expect(() => assertUploadSize(atLimit)).not.toThrow();
-    expect(uploadSizeError(overLimit)).toBe('Files must be 4 MB or smaller.');
-    expect(() => assertUploadSize(overLimit)).toThrow('Files must be 4 MB or smaller.');
+    expect(uploadSizeError(overLimit)).toBe('Files must be 20 MB or smaller.');
+    expect(() => assertUploadSize(overLimit)).toThrow('Files must be 20 MB or smaller.');
   });
 });
