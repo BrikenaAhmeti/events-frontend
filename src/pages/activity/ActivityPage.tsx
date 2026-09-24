@@ -111,9 +111,14 @@ export function ActivityPage() {
             <p className="text-sm text-muted-foreground">{t('filterDescription')}</p>
           </div>
         </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className={`grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:items-end ${
+          showClientFilter
+            ? 'xl:grid-cols-[repeat(5,minmax(0,1fr))_minmax(9rem,0.65fr)]'
+            : 'xl:grid-cols-[repeat(4,minmax(0,1fr))_minmax(9rem,0.65fr)]'
+        }`}>
           {showClientFilter && (
             <CustomSelect
+              className="min-w-0"
               label={t('client')}
               icon={Building2}
               value={clientId}
@@ -136,6 +141,7 @@ export function ActivityPage() {
             />
           )}
           <CustomSelect
+            className="min-w-0"
             label={t('teamMember')}
             icon={UserRound}
             value={actorUserId}
@@ -152,6 +158,7 @@ export function ActivityPage() {
             }}
           />
           <CustomSelect
+            className="min-w-0"
             label={t('action')}
             icon={Activity}
             value={action}
@@ -167,7 +174,7 @@ export function ActivityPage() {
               resetPage();
             }}
           />
-          <div>
+          <div className="min-w-0">
             <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">
               {t('from')}
             </p>
@@ -180,7 +187,7 @@ export function ActivityPage() {
               }}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="mb-1.5 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">
               {t('to')}
             </p>
@@ -193,7 +200,7 @@ export function ActivityPage() {
               }}
             />
           </div>
-          <Button className="filter-control" variant="quiet" onClick={clearFilters}>
+          <Button className="filter-control min-h-12 whitespace-nowrap" variant="quiet" onClick={clearFilters}>
             {t('clearFilters')}
           </Button>
         </div>
