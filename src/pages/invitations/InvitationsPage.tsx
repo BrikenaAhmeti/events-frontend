@@ -29,7 +29,7 @@ export function InvitationsPage() {
   const { event } = useOutletContext<EventOutletContext>();
   const { t } = useTranslation('invitations');
   const { data: user } = useCurrentUser();
-  const mayRead = Boolean(user && can(user, 'INVITATION_READ', event.clientId));
+  const mayRead = Boolean(user && can(user, 'EVENT_READ', event.clientId));
   const maySend = Boolean(user && (event.capabilities.canSendInvitations ?? event.capabilities.canEdit));
   const mayRevoke = Boolean(user && (event.capabilities.canRevokeInvitations ?? event.capabilities.canEdit));
   const { showToast } = useToast();
@@ -84,6 +84,7 @@ export function InvitationsPage() {
   if (user && !mayRead) return <Navigate to="/app/forbidden" replace />;
   return (
     <div>
+      {invitations.isError && <p role="alert" className="mb-4 rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger">{invitations.error.message}</p>}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="font-display text-3xl">{t('title')}</h2>
@@ -131,7 +132,7 @@ export function InvitationsPage() {
               ))}
             </div>
           ) : (
-            !invitations.isLoading && <EmptyState icon={Mail} title={t('empty')} />
+            !invitations.isLoading && !invitations.isError && <EmptyState icon={Mail} title={t('empty')} />
           )}
         </section>
         <aside className="rounded-2xl border border-border bg-surface p-5">

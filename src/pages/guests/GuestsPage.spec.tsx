@@ -140,6 +140,21 @@ describe('GuestsPage invitations', () => {
     capabilities: { ...event.capabilities, canSendInvitations: true, canManageGuests: true },
   } as EventDetail;
 
+  it('shows a guest loading error instead of an empty list when the API rejects access', async () => {
+    server.use(
+      http.get('http://localhost:3000/api/v1/auth/me', () => HttpResponse.json({
+        userId: 'staff-a', email: 'staff@example.test', firstName: 'Staff', lastName: 'Member', platformRole: null,
+        memberships: [{ clientId: 'client-a', role: 'CLIENT_STAFF', status: 'ACTIVE', permissions: ['EVENT_READ'] }],
+      })),
+      http.get('http://localhost:3000/api/v1/events/event-a/guests', () => HttpResponse.json({
+        statusCode: 403, code: 'FORBIDDEN', message: 'You do not have permission to perform this action.',
+      }, { status: 403 })),
+    );
+    renderApp(<MemoryRouter><Routes><Route element={<Harness eventValue={publishedEvent} />}><Route index element={<GuestsPage />} /></Route></Routes></MemoryRouter>);
+    expect(await screen.findByRole('alert')).toHaveTextContent('You do not have permission');
+    expect(screen.queryByText('No guests have been added yet.')).not.toBeInTheDocument();
+  });
+
   it('shows the guest list read-only to staff who did not create the event', async () => {
     server.use(
       http.get('http://localhost:3000/api/v1/auth/me', () => HttpResponse.json({

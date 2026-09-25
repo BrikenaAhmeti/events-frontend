@@ -41,9 +41,9 @@ export function EventLayout() {
   const tabs = [
     ['', t('overview'), LayoutDashboard, 'EVENT_READ'],
     ['concierge', t('concierge'), MessageCircle, 'EVENT_READ'],
-    ['guests', t('guests'), Users, 'GUEST_READ'],
+    ['guests', t('guests'), Users, 'EVENT_READ'],
     ['documents', t('documents'), FileText, 'EVENT_READ'],
-    ['invitations', t('invitations'), Link2, 'INVITATION_READ'],
+    ['invitations', t('invitations'), Link2, 'EVENT_READ'],
     ['schedule', t('schedule'), CalendarDays, 'EVENT_READ'],
   ] as const;
   return (

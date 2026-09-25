@@ -44,7 +44,7 @@ export function GuestsPage() {
   const { event } = useOutletContext<EventOutletContext>();
   const { t } = useTranslation('guests');
   const { data: user } = useCurrentUser();
-  const mayRead = Boolean(user && can(user, 'GUEST_READ', event.clientId));
+  const mayRead = Boolean(user && can(user, 'EVENT_READ', event.clientId));
   const mayManage = Boolean(user && (event.capabilities.canManageGuests ?? event.capabilities.canEdit));
   const mayImport = Boolean(user && (event.capabilities.canImportGuests ?? event.capabilities.canEdit));
   const maySend = Boolean(user && event.status === 'PUBLISHED' && (event.capabilities.canSendInvitations ?? event.capabilities.canEdit));
@@ -154,6 +154,7 @@ export function GuestsPage() {
           {maySend && <Button variant="secondary" loading={sendInvitations.isPending} onClick={() => sendInvitations.mutate({})}>{t('sendUnsent')}</Button>}
         </div>
       </div>
+      {guests.isError && <p role="alert" className="mb-4 rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger">{guests.error.message}</p>}
       {guestItems.length ? (
         <div className="overflow-hidden rounded-xl border border-border bg-surface">
           <div className={`hidden gap-4 border-b border-border px-5 py-3 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground md:grid ${guestColumns}`}>
@@ -184,7 +185,7 @@ export function GuestsPage() {
           ))}
         </div>
       ) : (
-        !guests.isLoading && (
+        !guests.isLoading && !guests.isError && (
           <EmptyState
             icon={Users}
             title={t('empty')}
