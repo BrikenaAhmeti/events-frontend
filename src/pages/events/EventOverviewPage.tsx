@@ -12,7 +12,6 @@ import { Input, Textarea } from '../../components/atoms/Input';
 import { ConfirmDialog } from '../../components/molecules/ConfirmDialog';
 import { DateTimePicker } from '../../components/molecules/DateTimePicker';
 import { FormField } from '../../components/molecules/FormField';
-import { can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
 import { CompletenessPanel } from '../../features/events/CompletenessPanel';
 import { apiClient } from '../../lib/api/api-client';
@@ -50,7 +49,7 @@ export function EventOverviewPage() {
   const mayEdit = Boolean(user && event.capabilities.canEdit);
   const [searchParams, setSearchParams] = useSearchParams();
   const mayPublish = Boolean(
-    user && (event.capabilities.canPublish ?? event.capabilities.canEdit) && can(user, 'EVENT_PUBLISH', event.clientId),
+    user && (event.capabilities.canPublish ?? event.capabilities.canEdit),
   );
   const [publishOpen, setPublishOpen] = useState(false);
   const [sendInvitationsOnPublish, setSendInvitationsOnPublish] = useState<boolean | null>(null);

@@ -140,13 +140,35 @@ describe('GuestsPage invitations', () => {
     capabilities: { ...event.capabilities, canSendInvitations: true, canManageGuests: true },
   } as EventDetail;
 
+  it('shows the guest list read-only to staff who did not create the event', async () => {
+    server.use(
+      http.get('http://localhost:3000/api/v1/auth/me', () => HttpResponse.json({
+        userId: 'staff-b', email: 'other@example.test', firstName: 'Other', lastName: 'Staff', platformRole: null,
+        memberships: [{ clientId: 'client-a', role: 'CLIENT_STAFF', status: 'ACTIVE', permissions: ['EVENT_CREATE'] }],
+      })),
+      http.get('http://localhost:3000/api/v1/events/event-a/guests', () => HttpResponse.json({
+        items: [{ id: 'guest-a', fullName: 'Avery Stone', email: 'avery@example.test', company: null, guestGroup: null }],
+        pageInfo: { hasNextPage: false, endCursor: null },
+      })),
+    );
+    const readOnlyEvent = { ...publishedEvent, capabilities: {
+      ...publishedEvent.capabilities,
+      canEdit: false, canManageGuests: false, canImportGuests: false, canSendInvitations: false,
+    } } as EventDetail;
+    renderApp(<MemoryRouter><Routes><Route element={<Harness eventValue={readOnlyEvent} />}><Route index element={<GuestsPage />} /></Route></Routes></MemoryRouter>);
+    expect(await screen.findByText('Avery Stone')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add guest' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Import guests' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Send invitations' })).not.toBeInTheDocument();
+  });
+
   it('imports edited rows and queues invitations only when that option is chosen', async () => {
     const imported = vi.fn(() => HttpResponse.json({ accepted: 1, duplicates: 0, guestIds: ['4e36fc71-5483-4d5a-b277-ff8d08f5a61c'] }));
     const sent = vi.fn(() => HttpResponse.json({ queued: 1 }));
     server.use(
       http.get('http://localhost:3000/api/v1/auth/me', () => HttpResponse.json({
-        userId: 'user-a', email: 'admin@example.test', firstName: 'Morgan', lastName: 'Reed', platformRole: null,
-        memberships: [{ clientId: 'client-a', role: 'CLIENT_ADMIN', status: 'ACTIVE', permissions: [] }],
+        userId: 'user-a', email: 'staff@example.test', firstName: 'Morgan', lastName: 'Reed', platformRole: null,
+        memberships: [{ clientId: 'client-a', role: 'CLIENT_STAFF', status: 'ACTIVE', permissions: ['EVENT_CREATE'] }],
       })),
       http.get('http://localhost:3000/api/v1/events/event-a/guests', () => HttpResponse.json({ items: [], pageInfo: { hasNextPage: false, endCursor: null } })),
       http.post('http://localhost:3000/api/v1/events/event-a/guests/imports/preview', () => HttpResponse.json({

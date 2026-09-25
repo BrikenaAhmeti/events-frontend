@@ -6,7 +6,9 @@ export const can = (user: CurrentUser, permission: Permission, clientId?: string
     ? user.memberships.find((entry) => entry.clientId === clientId && entry.status === 'ACTIVE')
     : user.memberships.find((entry) => entry.status === 'ACTIVE');
   if (!membership) return false;
-  return membership.role === 'CLIENT_ADMIN' || permission === 'EVENT_READ' || membership.permissions.includes(permission);
+  return membership.role === 'CLIENT_ADMIN' ||
+    ['EVENT_READ', 'GUEST_READ', 'INVITATION_READ'].includes(permission) ||
+    membership.permissions.includes(permission);
 };
 
 export const activeClientId = (user: CurrentUser): string | undefined =>

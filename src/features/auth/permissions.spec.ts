@@ -28,6 +28,9 @@ describe('frontend permission projection', () => {
     expect(can(user, 'TEAM_READ', 'client-a')).toBe(false);
     expect(can(user, 'TEAM_READ', 'client-b')).toBe(true);
     expect(can(user, 'EVENT_READ', 'client-b')).toBe(true);
+    expect(can(user, 'GUEST_READ', 'client-b')).toBe(true);
+    expect(can(user, 'INVITATION_READ', 'client-b')).toBe(true);
+    expect(can(user, 'GUEST_READ', 'client-c')).toBe(false);
     expect(can(user, 'EVENT_READ', 'client-c')).toBe(false);
     expect(can(user, 'EVENT_EDIT', 'client-b')).toBe(false);
   });

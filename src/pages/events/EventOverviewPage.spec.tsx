@@ -37,6 +37,25 @@ describe('EventOverviewPage publishing', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Publish event' }));
     await waitFor(() => expect(publishBody).toEqual({ sendInvitations: false }));
   });
+
+  it('lets staff publish their own event and send its invitations with create permission', async () => {
+    let publishBody: { sendInvitations?: boolean } | undefined;
+    server.use(
+      http.get('http://localhost:3000/api/v1/auth/me', () => HttpResponse.json({
+        userId: 'staff-a', email: 'staff@example.test', firstName: 'Morgan', lastName: 'Reed', platformRole: null,
+        memberships: [{ clientId: 'client-a', role: 'CLIENT_STAFF', status: 'ACTIVE', permissions: ['EVENT_CREATE'] }],
+      })),
+      http.post('http://localhost:3000/api/v1/events/event-a/publish', async ({ request }) => {
+        publishBody = await request.json() as { sendInvitations?: boolean };
+        return HttpResponse.json({ ...event, status: 'PUBLISHED' });
+      }),
+    );
+    renderApp(<MemoryRouter><Routes><Route element={<Outlet context={{ event }} />}><Route index element={<EventOverviewPage />} /></Route><Route path="/app/events/:eventId/concierge" element={<div>Published</div>} /></Routes></MemoryRouter>);
+    await userEvent.click(await screen.findByRole('button', { name: 'Publish event' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('radio', { name: 'Send invitations when publishing' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Publish event' }));
+    await waitFor(() => expect(publishBody).toEqual({ sendInvitations: true }));
+  });
 });
 
 describe('EventOverviewPage editing', () => {
