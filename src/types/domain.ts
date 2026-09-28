@@ -67,6 +67,7 @@ export type EventSummary = {
   createdBy: { id: string; firstName: string; lastName: string; email: string };
   capabilities: {
     canEdit: boolean;
+    canEditSchedule?: boolean;
     canManageGuests?: boolean;
     canImportGuests?: boolean;
     canSendInvitations?: boolean;
@@ -88,6 +89,7 @@ export type ScheduleItem = {
   endAt: string | null;
   location: string | null;
   category: string | null;
+  visibility?: 'SHARED' | 'STAFF';
 };
 
 export type EventDetail = EventSummary & {

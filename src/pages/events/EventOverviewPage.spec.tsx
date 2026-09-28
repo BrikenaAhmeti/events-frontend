@@ -59,6 +59,32 @@ describe('EventOverviewPage publishing', () => {
 });
 
 describe('EventOverviewPage editing', () => {
+  it('saves event details using the event timezone and includes operational fields', async () => {
+    let submitted: Record<string, unknown> | undefined;
+    const athensEvent = {
+      ...event, startAt: '2027-05-18T04:00:00.000Z', endAt: '2027-05-18T20:00:00.000Z',
+      timezone: 'Europe/Athens',
+    };
+    server.use(
+      http.get('http://localhost:3000/api/v1/auth/me', () => HttpResponse.json({
+        userId: 'user-a', email: 'admin@example.test', firstName: 'Morgan', lastName: 'Reed',
+        platformRole: null, memberships: [{ clientId: 'client-a', role: 'CLIENT_ADMIN', status: 'ACTIVE', permissions: [] }],
+      })),
+      http.patch('http://localhost:3000/api/v1/events/event-a', async ({ request }) => {
+        submitted = await request.json() as Record<string, unknown>;
+        return HttpResponse.json(athensEvent);
+      }),
+    );
+    renderApp(<MemoryRouter initialEntries={['/app/events/event-a?edit=1']}><Routes><Route path="/app/events/:eventId" element={<Outlet context={{ event: athensEvent }} />}><Route index element={<EventOverviewPage />} /></Route></Routes></MemoryRouter>);
+
+    await userEvent.type(await screen.findByLabelText('Inside the venue: entrances, floors, rooms and meeting points'), 'East entrance');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(submitted).toMatchObject({
+      startAt: '2027-05-18T04:00:00.000Z', endAt: '2027-05-18T20:00:00.000Z',
+      venueDetails: 'East entrance',
+    }));
+  });
+
   it('opens the edit form from a direct edit link', async () => {
     server.use(
       http.get('http://localhost:3000/api/v1/auth/me', () => HttpResponse.json({

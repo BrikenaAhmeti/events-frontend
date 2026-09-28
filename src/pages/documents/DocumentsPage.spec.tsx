@@ -48,6 +48,34 @@ function Harness() {
 }
 
 describe('DocumentsPage', () => {
+  it('shows extracted text and applies reviewed document details', async () => {
+    let appliedText = '';
+    server.use(
+      http.get('http://localhost:3000/api/v1/auth/me', () => HttpResponse.json({
+        userId: 'user-a', email: 'staff@example.test', firstName: 'Morgan', lastName: 'Reed',
+        platformRole: null, memberships: [{ clientId: 'client-a', role: 'CLIENT_ADMIN', status: 'ACTIVE', permissions: ['EVENT_READ', 'DOCUMENT_UPLOAD'] }],
+      })),
+      http.get('http://localhost:3000/api/v1/events/event-a/documents', () => HttpResponse.json([{
+        id: 'document-a', originalName: 'agenda.txt', mimeType: 'text/plain', size: 42,
+        processingStatus: 'COMPLETED', processingError: null, createdAt: '2027-01-01T00:00:00Z',
+      }])),
+      http.get('http://localhost:3000/api/v1/events/event-a/documents/document-a/extraction', () => HttpResponse.json({
+        id: 'document-a', originalName: 'agenda.txt', status: 'COMPLETED', error: null,
+        text: 'Dinner is at 8 pm in Riverside Hall.', truncated: false, metadata: {},
+      })),
+      http.post('http://localhost:3000/api/v1/events/event-a/concierge/extract', async ({ request }) => {
+        appliedText = ((await request.json()) as { text: string }).text;
+        return HttpResponse.json({ message: { content: '1 schedule item added or updated.' } });
+      }),
+    );
+    renderApp(<MemoryRouter><Routes><Route element={<Outlet context={{ event: { ...event, capabilities: { ...event.capabilities, canEdit: true } } }} />}><Route index element={<DocumentsPage />} /></Route></Routes></MemoryRouter>);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Review text' }));
+    expect(await screen.findByText('Dinner is at 8 pm in Riverside Hall.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Apply details to event' }));
+    await waitFor(() => expect(appliedText).toBe('Dinner is at 8 pm in Riverside Hall.'));
+  });
+
   it('uploads a selected event document when the actor has permission', async () => {
     const uploaded = vi.fn();
     server.use(

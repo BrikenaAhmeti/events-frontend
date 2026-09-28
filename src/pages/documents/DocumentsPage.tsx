@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileCheck2, FileText, UploadCloud } from 'lucide-react';
+import { FileCheck2, FileText, UploadCloud, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useOutletContext } from 'react-router-dom';
 import { useToast } from '../../app/providers/toast-provider';
 import { EmptyState } from '../../components/molecules/EmptyState';
+import { Button } from '../../components/atoms/Button';
 import { StatusBadge } from '../../components/molecules/StatusBadge';
 import { can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
@@ -12,7 +13,7 @@ import { apiClient } from '../../lib/api/api-client';
 import { uploadDirectly } from '../../lib/api/direct-upload';
 import { MAX_FUNCTION_UPLOAD_BYTES } from '../../lib/api/upload-limits';
 import { uploadSizeError } from '../../lib/api/upload-limits';
-import { documentKeys } from '../../lib/api/query-keys';
+import { documentKeys, eventKeys, guestKeys } from '../../lib/api/query-keys';
 import type { EventOutletContext } from '../events/EventLayout';
 
 type DocumentItem = {
@@ -23,6 +24,15 @@ type DocumentItem = {
   processingStatus: string;
   processingError: string | null;
   createdAt: string;
+};
+type Extraction = {
+  id: string;
+  originalName: string;
+  status: string;
+  error: string | null;
+  text: string;
+  truncated: boolean;
+  metadata: Record<string, unknown>;
 };
 const fileSize = (bytes: number) =>
   bytes < 1_000_000 ? `${Math.ceil(bytes / 1_000)} KB` : `${(bytes / 1_000_000).toFixed(1)} MB`;
@@ -40,6 +50,23 @@ export function DocumentsPage() {
   const { showToast } = useToast();
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [selected, setSelected] = useState<DocumentItem | null>(null);
+  const extraction = useQuery({
+    queryKey: ['document-extraction', event.id, selected?.id],
+    queryFn: ({ signal }) => apiClient.get<Extraction>(`/events/${event.id}/documents/${selected?.id}/extraction`, signal),
+    enabled: Boolean(selected),
+  });
+  const apply = useMutation({
+    mutationFn: (text: string) => apiClient.post<{ message?: { content?: string }; addedGuests?: number }>(
+      `/events/${event.id}/concierge/extract`, { text },
+    ),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: eventKeys.detail(event.id) });
+      void queryClient.invalidateQueries({ queryKey: guestKeys.list(event.id) });
+      showToast(result.message?.content ?? t('detailsApplied'));
+      setSelected(null);
+    },
+  });
   const documents = useQuery({
     queryKey: documentKeys.list(event.id),
     queryFn: ({ signal }) => apiClient.get<DocumentItem[]>(`/events/${event.id}/documents`, signal),
@@ -144,6 +171,9 @@ export function DocumentsPage() {
                 </p>
               </div>
               <StatusBadge status={document.processingStatus} />
+              <Button size="sm" variant="quiet" onClick={() => setSelected(document)}>{t('reviewText')}</Button>
+              {document.processingStatus === 'FAILED' && document.processingError &&
+                <p role="alert" className="text-xs text-danger">{document.processingError}</p>}
             </article>
           ))}
           {documents.data?.length === 0 && <EmptyState icon={FileText} title={t('empty')} />}
@@ -153,6 +183,20 @@ export function DocumentsPage() {
         <h3 className="font-display text-xl">{t('safetyTitle')}</h3>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">{t('safetyDescription')}</p>
       </aside>
+      {selected && <div className="fixed inset-0 z-40 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="document-review-title">
+        <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl border border-border bg-surface-raised">
+          <div className="flex items-center justify-between border-b border-border p-5"><h2 id="document-review-title" className="font-display text-2xl">{t('reviewTitle', { name: selected.originalName })}</h2><button type="button" onClick={() => setSelected(null)} aria-label={t('close', { ns: 'common' })}><X className="size-5" /></button></div>
+          <div className="overflow-y-auto p-5">
+            {extraction.isLoading && <p>{t('processing')}</p>}
+            {extraction.isError && <p role="alert" className="text-danger">{extraction.error.message}</p>}
+            {extraction.data?.error && <p role="alert" className="mb-3 text-danger">{extraction.data.error}</p>}
+            {extraction.data?.text ? <pre className="whitespace-pre-wrap break-words rounded-lg bg-surface-sunken p-4 text-sm">{extraction.data.text}</pre> : !extraction.isLoading && <p>{t('noReadableText')}</p>}
+            {extraction.data?.truncated && <p className="mt-3 text-sm text-muted-foreground">{t('previewTruncated')}</p>}
+            {apply.error && <p role="alert" className="mt-3 text-danger">{apply.error.message}</p>}
+          </div>
+          <div className="flex justify-end gap-3 border-t border-border p-4"><Button variant="quiet" onClick={() => setSelected(null)}>{t('close', { ns: 'common' })}</Button>{event.capabilities.canEdit && extraction.data?.status === 'COMPLETED' && Boolean(extraction.data.text) && <Button loading={apply.isPending} disabled={extraction.data.truncated} onClick={() => apply.mutate(extraction.data?.text ?? '')}>{t('applyDetails')}</Button>}</div>
+        </div>
+      </div>}
     </div>
   );
 }

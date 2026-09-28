@@ -14,6 +14,8 @@ export const guestImportRowSchema = z.object({
   accessibilityInformation: z.string().trim().max(2_000).optional(),
   accommodation: z.string().trim().max(2_000).optional(),
   travelInformation: z.string().trim().max(2_000).optional(),
+  seatNumber: z.string().trim().max(100).optional(),
+  hotelRoom: z.string().trim().max(100).optional(),
 });
 
 export type GuestImportRow = z.infer<typeof guestImportRowSchema>;
@@ -35,7 +37,7 @@ export type GuestImportPreview = {
 const headers = [
   'Full name', 'Email', 'First name', 'Last name', 'Company', 'Job title', 'Phone',
   'Guest group', 'Notes', 'Dietary information', 'Accessibility information',
-  'Accommodation', 'Travel information',
+  'Accommodation', 'Travel information', 'Seat number', 'Hotel room',
 ];
 
 function download(blob: Blob, filename: string) {

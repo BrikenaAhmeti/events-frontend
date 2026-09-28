@@ -78,7 +78,11 @@ type SetupAnalysis = {
     location?: string;
     category?: string;
   }>;
-  guests: Array<{ fullName: string; email: string; company?: string; guestGroup?: string; notes?: string }>;
+  guests: Array<{
+    fullName: string; email: string; company?: string; guestGroup?: string; notes?: string;
+    seatNumber?: string; hotelRoom?: string; accommodation?: string; travelInformation?: string;
+    dietaryInformation?: string; accessibilityInformation?: string;
+  }>;
   documentReviewPending?: boolean;
   extractedFacts: number;
   extractedScheduleItems: number;
@@ -645,8 +649,8 @@ export function CreateEventPage() {
                 draft={draft}
                 completeness={draftCompleteness}
                 facts={analyzedContent.extractedFacts}
-                schedule={analyzedContent.extractedScheduleItems}
-                guests={analyzedContent.guests.length}
+                schedule={analyzedContent.schedule}
+                guests={analyzedContent.guests}
                 createError={create.error?.message}
                 createPending={create.isPending}
                 canSubmit={canSubmit}
@@ -682,7 +686,7 @@ export function CreateEventPage() {
                   : documentReviewPending
                     ? t('documentReviewPlaceholder')
                     : reviewed
-                      ? correctionRequested ? t('correctionChatPlaceholder') : setupComposerPlaceholder(guidedStep, t)
+                      ? correctionRequested ? t('correctionChatPlaceholder') : setupComposerPlaceholder(guidedStep, draftCompleteness, t)
                       : t('eventBriefPlaceholder')
               }
               maxLength={80_000}
@@ -766,12 +770,17 @@ function getGuidedSetupStep(completeness: EventCompleteness): GuidedSetupStep {
 
 function setupComposerPlaceholder(
   step: GuidedSetupStep,
+  completeness: EventCompleteness,
   t: ReturnType<typeof useTranslation<'events'>>['t'],
 ): string {
   if (step === 'basics') return t('basicsChatPlaceholder');
   if (step === 'dates') return t('datesChatPlaceholder');
   if (step === 'location') return t('locationChatPlaceholder');
-  if (step === 'organizer') return t('organizerChatPlaceholder');
+  if (step === 'organizer') {
+    if (!completeness.missing.includes('organizerName')) return t('organizerEmailChatPlaceholder');
+    if (!completeness.missing.includes('organizerEmail')) return t('organizerNameChatPlaceholder');
+    return t('organizerChatPlaceholder');
+  }
   return t('addMoreEventInformation');
 }
 
@@ -791,8 +800,8 @@ function EventDraftSummary({
   draft: Draft;
   completeness: EventCompleteness;
   facts: number;
-  schedule: number;
-  guests: number;
+  schedule: SetupAnalysis['schedule'];
+  guests: SetupAnalysis['guests'];
   createError?: string;
   createPending: boolean;
   canSubmit: boolean;
@@ -857,12 +866,14 @@ function EventDraftSummary({
           {t('dynamicDetailCount', { count: facts })}
         </span>
         <span className="rounded-full border border-border px-3 py-1.5">
-          {t('scheduleItemCount', { count: schedule })}
+          {t('scheduleItemCount', { count: schedule.length })}
         </span>
         <span className="rounded-full border border-border px-3 py-1.5">
-          {t('chatGuestCount', { count: guests })}
+          {t('chatGuestCount', { count: guests.length })}
         </span>
       </div>
+      {schedule.length > 0 && <details className="mt-3 rounded-xl border border-border p-3"><summary className="cursor-pointer font-semibold">{t('reviewScheduleItems')}</summary><ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-sm">{schedule.map((item, index) => <li key={`${item.title}-${index}`}>{item.title} · {formatDraftDate(item.startAt, draft.timezone)}{item.location ? ` · ${item.location}` : ''}</li>)}</ul></details>}
+      {guests.length > 0 && <details className="mt-3 rounded-xl border border-border p-3"><summary className="cursor-pointer font-semibold">{t('reviewGuestDetails')}</summary><ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-sm">{guests.map((guest, index) => <li key={`${guest.email}-${index}`}>{guest.fullName} · {guest.email}{guest.seatNumber ? ` · ${t('guestSeat', { seat: guest.seatNumber })}` : ''}{guest.hotelRoom ? ` · ${t('guestRoom', { room: guest.hotelRoom })}` : ''}{guest.notes ? ` · ${guest.notes}` : ''}</li>)}</ul></details>}
       <div className="mt-5">
         <CompletenessPanel completeness={completeness} />
       </div>

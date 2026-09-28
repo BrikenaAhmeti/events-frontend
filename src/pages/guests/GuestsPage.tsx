@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PencilLine, Plus, Upload, UserRoundPlus, Users, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { PencilLine, Plus, Trash2, Upload, UserRoundPlus, Users, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useOutletContext } from 'react-router-dom';
@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { useToast } from '../../app/providers/toast-provider';
 import { Button } from '../../components/atoms/Button';
 import { Input } from '../../components/atoms/Input';
+import { ConfirmDialog } from '../../components/molecules/ConfirmDialog';
 import { EmptyState } from '../../components/molecules/EmptyState';
 import { FormField } from '../../components/molecules/FormField';
 import { can } from '../../features/auth/permissions';
@@ -32,11 +33,35 @@ type Guest = {
   guestGroup: string | null;
   latestInvitation?: { id: string; status: string; sentAt: string | null } | null;
 };
+type GuestDetails = Guest & {
+  firstName: string | null;
+  lastName: string | null;
+  jobTitle: string | null;
+  phone: string | null;
+  notes: string | null;
+  dietaryInformation: string | null;
+  accessibilityInformation: string | null;
+  accommodation: string | null;
+  travelInformation: string | null;
+  seatNumber: string;
+  hotelRoom: string;
+};
 const schema = z.object({
   fullName: z.string().min(2),
   email: z.email(),
   company: z.string(),
   guestGroup: z.string(),
+  firstName: z.string().max(100),
+  lastName: z.string().max(100),
+  jobTitle: z.string().max(200),
+  phone: z.string().max(80),
+  notes: z.string().max(5_000),
+  dietaryInformation: z.string().max(2_000),
+  accessibilityInformation: z.string().max(2_000),
+  accommodation: z.string().max(2_000),
+  travelInformation: z.string().max(2_000),
+  seatNumber: z.string().max(100),
+  hotelRoom: z.string().max(100),
 });
 type Values = z.infer<typeof schema>;
 
@@ -244,6 +269,12 @@ function GuestDialog({
   const { t } = useTranslation('guests');
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const details = useQuery({
+    queryKey: ['guest', eventId, guest?.id],
+    queryFn: ({ signal }) => apiClient.get<GuestDetails>(`/events/${eventId}/guests/${guest?.id}`, signal),
+    enabled: Boolean(guest),
+  });
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -251,15 +282,34 @@ function GuestDialog({
       email: guest?.email ?? '',
       company: guest?.company ?? '',
       guestGroup: guest?.guestGroup ?? '',
+      firstName: '', lastName: '', jobTitle: '', phone: '', notes: '',
+      dietaryInformation: '', accessibilityInformation: '', accommodation: '',
+      travelInformation: '', seatNumber: '', hotelRoom: '',
     },
   });
+  useEffect(() => {
+    if (!details.data) return;
+    form.reset({
+      fullName: details.data.fullName,
+      email: details.data.email,
+      company: details.data.company ?? '',
+      guestGroup: details.data.guestGroup ?? '',
+      firstName: details.data.firstName ?? '',
+      lastName: details.data.lastName ?? '',
+      jobTitle: details.data.jobTitle ?? '',
+      phone: details.data.phone ?? '',
+      notes: details.data.notes ?? '',
+      dietaryInformation: details.data.dietaryInformation ?? '',
+      accessibilityInformation: details.data.accessibilityInformation ?? '',
+      accommodation: details.data.accommodation ?? '',
+      travelInformation: details.data.travelInformation ?? '',
+      seatNumber: details.data.seatNumber ?? '',
+      hotelRoom: details.data.hotelRoom ?? '',
+    });
+  }, [details.data, form]);
   const save = useMutation({
     mutationFn: async (values: Values) => {
-      if (guest) return apiClient.patch<{ id: string }>(`/events/${eventId}/guests/${guest.id}`, {
-            ...values,
-            company: values.company || undefined,
-            guestGroup: values.guestGroup || undefined,
-          });
+      if (guest) return apiClient.patch<{ id: string }>(`/events/${eventId}/guests/${guest.id}`, values);
       const created = await apiClient.post<{ id: string }>(`/events/${eventId}/guests`, {
             ...values,
             company: values.company || undefined,
@@ -274,8 +324,19 @@ function GuestDialog({
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: guestKeys.list(eventId) });
       void queryClient.invalidateQueries({ queryKey: invitationKeys.list(eventId) });
+      if (guest) void queryClient.invalidateQueries({ queryKey: ['guest', eventId, guest.id] });
       showToast('invitationError' in result ? t('addedInviteFailed', { error: result.invitationError }) : guest ? t('updated') : t('added'), 'invitationError' in result ? 'danger' : 'success');
       form.reset();
+      close();
+    },
+  });
+  const remove = useMutation({
+    mutationFn: () => apiClient.delete(`/events/${eventId}/guests/${guest?.id}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: guestKeys.list(eventId) });
+      void queryClient.invalidateQueries({ queryKey: invitationKeys.list(eventId) });
+      showToast(t('deleted'));
+      setDeleteOpen(false);
       close();
     },
   });
@@ -287,7 +348,7 @@ function GuestDialog({
       aria-modal="true"
       aria-labelledby="add-guest-title"
     >
-      <div className="w-full max-w-lg rounded-2xl border border-border bg-surface-raised">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-surface-raised">
         <div className="flex items-center justify-between border-b border-border p-5">
           <h2 id="add-guest-title" className="font-display text-2xl">
             {guest ? t('edit') : t('add')}
@@ -301,8 +362,10 @@ function GuestDialog({
             <X className="size-5" />
           </button>
         </div>
+        {details.isLoading && <p className="p-5 text-sm text-muted-foreground">{t('loadingDetails')}</p>}
+        {details.isError && <p className="p-5 text-sm text-danger" role="alert">{details.error.message}</p>}
         <form onSubmit={(event) => void form.handleSubmit((values) => save.mutate(values))(event)}>
-          <div className="grid gap-5 p-5 sm:grid-cols-2">
+          <div className="grid max-h-[60vh] gap-5 overflow-y-auto p-5 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <FormField label={t('fullName')} htmlFor="guest-name">
                 <Input id="guest-name" {...form.register('fullName')} />
@@ -319,6 +382,18 @@ function GuestDialog({
             <FormField label={t('group')} htmlFor="guest-group">
               <Input id="guest-group" {...form.register('guestGroup')} />
             </FormField>
+            {([['firstName', 'firstName'], ['lastName', 'lastName'], ['jobTitle', 'jobTitle'],
+              ['phone', 'phone'], ['seatNumber', 'seatNumber'], ['hotelRoom', 'hotelRoom']] as const).map(([field, label]) => (
+                <FormField key={field} label={t(label)} htmlFor={`guest-${field}`}>
+                  <Input id={`guest-${field}`} {...form.register(field)} />
+                </FormField>
+              ))}
+            {([['notes', 'notes'], ['accommodation', 'accommodation'], ['travelInformation', 'travelInformation'],
+              ['dietaryInformation', 'dietaryInformation'], ['accessibilityInformation', 'accessibilityInformation']] as const).map(([field, label]) => (
+                <FormField key={field} label={t(label)} htmlFor={`guest-${field}`}>
+                  <textarea id={`guest-${field}`} rows={3} className="w-full rounded-lg border border-input bg-surface px-3 py-2 text-sm" {...form.register(field)} />
+                </FormField>
+              ))}
             {save.error && (
               <p className="text-sm text-danger sm:col-span-2" role="alert">
                 {save.error.message}
@@ -326,14 +401,27 @@ function GuestDialog({
             )}
           </div>
           <div className="flex justify-end gap-3 border-t border-border p-4">
+            {guest && <Button type="button" variant="danger" onClick={() => setDeleteOpen(true)}><Trash2 className="size-4" />{t('delete')}</Button>}
             <Button type="button" variant="quiet" onClick={close}>
               {t('cancel', { ns: 'common' })}
             </Button>
-            <Button type="submit" loading={save.isPending}>
+            <Button type="submit" loading={save.isPending} disabled={Boolean(guest && !details.data)}>
               {guest ? t('save') : t('add')}
             </Button>
           </div>
         </form>
+        <ConfirmDialog
+          open={deleteOpen}
+          title={t('deleteTitle')}
+          description={t('deleteDescription', { name: guest?.fullName ?? '' })}
+          confirmLabel={t('delete')}
+          tone="danger"
+          loading={remove.isPending}
+          onClose={() => setDeleteOpen(false)}
+          onConfirm={() => remove.mutate()}
+        >
+          {remove.error && <p role="alert" className="mt-3 text-sm text-danger">{remove.error.message}</p>}
+        </ConfirmDialog>
       </div>
     </div>
   );

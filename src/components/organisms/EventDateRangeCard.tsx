@@ -52,7 +52,7 @@ export function localDateTimeToUtc(value: string, timezone: string): string | nu
   }
 }
 
-const localValue = (value: string, timezone: string) => {
+export const localValue = (value: string, timezone: string) => {
   if (!value) return '';
   try {
     return partsInZone(new Date(value), timezone);

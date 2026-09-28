@@ -27,7 +27,7 @@ export function ConciergePage() {
         eventStatus={event.status}
         ready={event.completeness.ready}
         guestCount={event._count.guests}
-        allowPlanning={Boolean(user && event.capabilities.canEdit)}
+        allowPlanning={Boolean(user && (event.capabilities.canEdit || event.capabilities.canEditSchedule))}
         allowGuestManage={Boolean(user && (event.capabilities.canManageGuests ?? event.capabilities.canEdit))}
         allowGuestImport={Boolean(user && (event.capabilities.canImportGuests ?? event.capabilities.canEdit))}
         allowPublish={Boolean(user && (event.capabilities.canPublish ?? event.capabilities.canEdit))}

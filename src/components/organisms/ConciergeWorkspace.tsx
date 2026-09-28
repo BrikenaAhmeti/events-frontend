@@ -26,7 +26,7 @@ type ConciergeStreamEvent =
 
 const isQuestion = (content: string) =>
   (/\?\s*$/.test(content) || /^(what|when|where|who|how|why|is|are|can|could|do|does|tell me|show me)\b/i.test(content)) &&
-  !/\b(add|update|change|set|remove|invite|register|save|correct|replace)\b/i.test(content);
+  !/\b(add|update|change|set|remove|invite|register|save|correct|replace|move|reschedule|shift|postpone|delete)\b/i.test(content);
 
 export function ConciergeWorkspace({
   eventId,

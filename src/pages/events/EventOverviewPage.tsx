@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, Mail, MapPin, PencilLine, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
@@ -11,6 +11,7 @@ import { Button } from '../../components/atoms/Button';
 import { Input, Textarea } from '../../components/atoms/Input';
 import { ConfirmDialog } from '../../components/molecules/ConfirmDialog';
 import { DateTimePicker } from '../../components/molecules/DateTimePicker';
+import { localDateTimeToUtc, localValue } from '../../components/organisms/EventDateRangeCard';
 import { FormField } from '../../components/molecules/FormField';
 import { useCurrentUser } from '../../features/auth/use-current-user';
 import { CompletenessPanel } from '../../features/events/CompletenessPanel';
@@ -20,10 +21,17 @@ import type { EventDetail } from '../../types/domain';
 import type { EventOutletContext } from './EventLayout';
 
 const schema = z.object({
+  name: z.string().min(2),
+  category: z.string().min(2),
   description: z.string().min(10),
   destination: z.string().min(2),
   venue: z.string(),
   venueAddress: z.string(),
+  venueDetails: z.string(),
+  restroomInformation: z.string(),
+  accessibilityInformation: z.string(),
+  parkingInformation: z.string(),
+  wifiInformation: z.string(),
   startAt: z.string().min(1),
   endAt: z.string().min(1),
   timezone: z.string().min(3),
@@ -39,8 +47,8 @@ const schema = z.object({
     .max(200),
 });
 type Values = z.infer<typeof schema>;
-const localDateTime = (value: string | null) =>
-  value ? new Date(value).toISOString().slice(0, 16) : '';
+const localDateTime = (value: string | null, timezone: string) =>
+  value ? localValue(value, timezone) : '';
 
 export function EventOverviewPage() {
   const { event } = useOutletContext<EventOutletContext>();
@@ -68,12 +76,19 @@ export function EventOverviewPage() {
   const form = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
+      name: event.name,
+      category: event.category,
       description: event.description ?? '',
       destination: event.destination ?? '',
       venue: event.venue ?? '',
       venueAddress: event.venueAddress ?? '',
-      startAt: localDateTime(event.startAt),
-      endAt: localDateTime(event.endAt),
+      venueDetails: event.venueDetails ?? '',
+      restroomInformation: event.restroomInformation ?? '',
+      accessibilityInformation: event.accessibilityInformation ?? '',
+      parkingInformation: event.parkingInformation ?? '',
+      wifiInformation: event.wifiInformation ?? '',
+      startAt: localDateTime(event.startAt, event.timezone ?? 'UTC'),
+      endAt: localDateTime(event.endAt, event.timezone ?? 'UTC'),
       timezone: event.timezone ?? '',
       organizerName: event.organizerName ?? '',
       organizerEmail: event.organizerEmail ?? '',
@@ -83,21 +98,46 @@ export function EventOverviewPage() {
       })),
     },
   });
+  useEffect(() => {
+    if (editing) return;
+    form.reset({
+      name: event.name, category: event.category,
+      description: event.description ?? '', destination: event.destination ?? '',
+      venue: event.venue ?? '', venueAddress: event.venueAddress ?? '',
+      venueDetails: event.venueDetails ?? '', restroomInformation: event.restroomInformation ?? '',
+      accessibilityInformation: event.accessibilityInformation ?? '',
+      parkingInformation: event.parkingInformation ?? '', wifiInformation: event.wifiInformation ?? '',
+      startAt: localDateTime(event.startAt, event.timezone ?? 'UTC'),
+      endAt: localDateTime(event.endAt, event.timezone ?? 'UTC'),
+      timezone: event.timezone ?? '', organizerName: event.organizerName ?? '',
+      organizerEmail: event.organizerEmail ?? '',
+      details: event.facts.map((fact) => ({ title: formatFactTitle(fact.key), description: fact.value })),
+    });
+  }, [editing, event, form]);
   const details = useFieldArray({ control: form.control, name: 'details' });
   const update = useMutation({
-    mutationFn: ({ details: submittedDetails, ...values }: Values) =>
-      apiClient.patch<EventDetail>(`/events/${event.id}`, {
+    mutationFn: ({ details: submittedDetails, ...values }: Values) => {
+      const startAt = localDateTimeToUtc(values.startAt, values.timezone);
+      const endAt = localDateTimeToUtc(values.endAt, values.timezone);
+      if (!startAt || !endAt || endAt <= startAt) throw new Error(t('dateRangeInvalid'));
+      return apiClient.patch<EventDetail>(`/events/${event.id}`, {
         ...values,
         venue: values.venue || null,
         venueAddress: values.venueAddress || null,
-        startAt: new Date(values.startAt).toISOString(),
-        endAt: new Date(values.endAt).toISOString(),
+        venueDetails: values.venueDetails || null,
+        restroomInformation: values.restroomInformation || null,
+        accessibilityInformation: values.accessibilityInformation || null,
+        parkingInformation: values.parkingInformation || null,
+        wifiInformation: values.wifiInformation || null,
+        startAt,
+        endAt,
         facts: submittedDetails.map((detail) => ({
           key: detail.title,
           value: detail.description,
           confidence: 1,
         })),
-      }),
+      });
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: eventKeys.detail(event.id) });
       showToast(t('updated'));
@@ -154,6 +194,8 @@ export function EventOverviewPage() {
                 void form.handleSubmit((values) => update.mutate(values))(submitEvent)
               }
             >
+              <FormField label={t('name')} htmlFor="event-name"><Input id="event-name" {...form.register('name')} /></FormField>
+              <FormField label={t('category')} htmlFor="event-category"><select id="event-category" className="w-full rounded-lg border border-input bg-surface px-3 py-2 text-sm" {...form.register('category')}>{['CORPORATE_INCENTIVE', 'CONFERENCE', 'CORPORATE_RETREAT', 'WEDDING', 'SPORTS_TRAVEL', 'GROUP_TOUR', 'MEETING', 'MEMORIAL', 'OTHER'].map((category) => <option key={category} value={category}>{t(`categories.${category}`)}</option>)}</select></FormField>
               <div className="sm:col-span-2">
                 <FormField label={t('description')} htmlFor="description">
                   <Textarea id="description" {...form.register('description')} />
@@ -170,6 +212,7 @@ export function EventOverviewPage() {
                   <Input id="venue-address" {...form.register('venueAddress')} />
                 </FormField>
               </div>
+              {(['venueDetails', 'restroomInformation', 'accessibilityInformation', 'parkingInformation', 'wifiInformation'] as const).map((field) => <div className="sm:col-span-2" key={field}><FormField label={t(field)} htmlFor={`event-${field}`}><Textarea id={`event-${field}`} {...form.register(field)} /></FormField></div>)}
               <FormField label={t('startAt')} htmlFor="start">
                 <Controller
                   control={form.control}

@@ -114,6 +114,13 @@ describe('GuestsPage import workflow', () => {
       http.patch('http://localhost:3000/api/v1/events/event-a/guests/guest-a', () =>
         HttpResponse.json({ id: 'guest-a', fullName: 'Avery Reed' }),
       ),
+      http.get('http://localhost:3000/api/v1/events/event-a/guests/guest-a', () =>
+        HttpResponse.json({
+          id: 'guest-a', fullName: 'Avery Stone', email: 'avery@example.test',
+          company: 'Northstar', guestGroup: 'Delegates', notes: 'Arrival at 10',
+          seatNumber: 'B12', hotelRoom: '406',
+        }),
+      ),
     );
     renderApp(
       <MemoryRouter>
@@ -126,6 +133,7 @@ describe('GuestsPage import workflow', () => {
     );
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit guest' }));
+    expect(await screen.findByDisplayValue('B12')).toBeInTheDocument();
     const name = screen.getByLabelText('Full name');
     await userEvent.clear(name);
     await userEvent.type(name, 'Avery Reed');

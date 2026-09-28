@@ -11,6 +11,7 @@ const fields = [
   ['phone', 'Phone'], ['guestGroup', 'Guest group'], ['notes', 'Notes'],
   ['dietaryInformation', 'Dietary information'], ['accessibilityInformation', 'Accessibility information'],
   ['accommodation', 'Accommodation'], ['travelInformation', 'Travel information'],
+  ['seatNumber', 'Seat number'], ['hotelRoom', 'Hotel room'],
 ] as const;
 
 export function GuestImportDialog({ preview, close, confirm, loading, canSendNow, canSendOnPublish = false, sendDisabledReason, error }: {
