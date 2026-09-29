@@ -10,6 +10,22 @@ const streamEndpoint = 'http://localhost:3000/api/v1/guest/events/event-a/concie
 const chatsEndpoint = 'http://localhost:3000/api/v1/guest/events/event-a/concierge/chats';
 
 describe('ConciergeWorkspace', () => {
+  it('formats saved concierge messages as readable lists', async () => {
+    server.use(
+      http.get(historyEndpoint, () => HttpResponse.json({
+        id: 'conversation-a', language: 'en', messages: [
+          { id: 'message-a', role: 'CONCIERGE', content: '**Before arrival**\n\n- Bring your invitation\n- Check in at reception' },
+        ],
+      })),
+    );
+
+    renderApp(<ConciergeWorkspace eventId="event-a" guest />);
+
+    expect((await screen.findByText('Before arrival')).tagName).toBe('STRONG');
+    expect(screen.getByRole('list')).toHaveTextContent('Bring your invitation');
+    expect(screen.queryByText(/\*\*Before arrival\*\*/)).not.toBeInTheDocument();
+  });
+
   it('asks for a language first, then shows the AI’s opening question', async () => {
     server.use(
       http.get(historyEndpoint, () => HttpResponse.json({ id: null, language: null, messages: [] })),

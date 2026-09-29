@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../atoms/Button';
 import { Textarea } from '../atoms/Input';
 import { AssistantMessage, TypingIndicator, UserMessage } from '../molecules/ChatMessage';
+import { ChatContent } from '../molecules/ChatContent';
 import { GuestRowsCard } from './GuestRowsCard';
 import { GuestImportDialog } from '../../features/guests/GuestImportDialog';
 import { guestLanguageLabel, guestLanguageOptions } from '../../features/guest-chat/languages';
@@ -359,7 +360,7 @@ export function ConciergeWorkspace({
                 {item.content === t('updated') && (
                   <CheckCircle2 className="mb-2 size-5 text-success" />
                 )}
-                <span className="whitespace-pre-wrap">{item.content}</span>
+                <ChatContent content={item.content} />
                 {send.isPending &&
                   hasStreamingText &&
                   index === messages.length - 1 && (

@@ -26,6 +26,7 @@ import {
   UserMessage as UserChatBubble,
 } from '../../components/molecules/ChatMessage';
 import { CustomSelect } from '../../components/molecules/CustomSelect';
+import { ChatContent } from '../../components/molecules/ChatContent';
 import { EventDateRangeCard } from '../../components/organisms/EventDateRangeCard';
 import { activeClientId, can } from '../../features/auth/permissions';
 import { useCurrentUser } from '../../features/auth/use-current-user';
@@ -562,7 +563,7 @@ export function CreateEventPage() {
           {conversation.map((message) =>
             message.role === 'assistant' ? (
               <ChatBubble key={message.id} wide={Boolean(message.template)}>
-                {message.text && <p className="whitespace-pre-wrap">{message.text}</p>}
+                {message.text && <ChatContent content={message.text} />}
                 {message.template === 'EVENT_BRIEF' && <EventBriefTemplateCard />}
               </ChatBubble>
             ) : (
